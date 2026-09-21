@@ -454,6 +454,22 @@ function toast(msg, type){
   $('toast').appendChild(d);
   setTimeout(()=>d.remove(), type==='err'?4200:2200);
 }
+/* แปลงคีย์ที่เครื่องสแกนส่งมาตอนแป้นพิมพ์เป็นภาษาไทย (Kedmanee) กลับเป็นอังกฤษ */
+const THKEY = {
+'_':'`','ๅ':'1','/':'2','-':'3','ภ':'4','ถ':'5','ุ':'6','ึ':'7','ค':'8','ต':'9','จ':'0','ข':'-','ช':'=',
+'ๆ':'q','ไ':'w','ำ':'e','พ':'r','ะ':'t','ั':'y','ี':'u','ร':'i','น':'o','ย':'p','บ':'[','ล':']','ฃ':'\\',
+'ฟ':'a','ห':'s','ก':'d','ด':'f','เ':'g','้':'h','่':'j','า':'k','ส':'l','ว':';','ง':"'",
+'ผ':'z','ป':'x','แ':'c','อ':'v','ิ':'b','ื':'n','ท':'m','ม':',','ใ':'.','ฝ':'/',
+'%':'!','๑':'@','๒':'#','๓':'$','๔':'%','ู':'^','฿':'&','๕':'*','๖':'(','๗':')','๘':'_','๙':'+',
+'๐':'Q','"':'W','ฎ':'E','ฑ':'R','ธ':'T','ํ':'Y','๊':'U','ณ':'I','ฯ':'O','ญ':'P','ฐ':'{',',':'}',
+'ฤ':'A','ฆ':'S','ฏ':'D','โ':'F','ฌ':'G','็':'H','๋':'J','ษ':'K','ศ':'L','ซ':':','.':'"',
+'(':'Z',')':'X','ฉ':'C','ฮ':'V','ฺ':'B','์':'N','?':'M','ฒ':'<','ฬ':'>','ฦ':'?'
+};
+function fixThai(s){
+  if(!/[฀-๛]/.test(s)) return s;     // ไม่มีอักษรไทย = ไม่ต้องแปลง
+  let o = ''; for(const c of s) o += (THKEY[c] !== undefined ? THKEY[c] : c);
+  return o;
+}
 const todayStr = () => new Date().toLocaleDateString('sv-SE');
 const fmtDT = s => s ? new Date(s).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
@@ -621,8 +637,13 @@ function matchProd(p, q){
          (p.name||'').toLowerCase().includes(q) || (p.name_lo||'').toLowerCase().includes(q);
 }
 function renderGrid(){
-  const q = $('scanInput').value.trim();
-  const list = PRODUCTS.filter(p=>p.active && (CAT==='all'||(p.category||'ทั่วไป')===CAT) && matchProd(p,q));
+  let q = $('scanInput').value.trim();
+  const inCat = p => p.active && (CAT==='all'||(p.category||'ทั่วไป')===CAT);
+  let list = PRODUCTS.filter(p=>inCat(p) && matchProd(p,q));
+  if(!list.length && q){                       // ไม่เจอ → ลองแปลงจากแป้นพิมพ์ไทย
+    const fixed = fixThai(q);
+    if(fixed !== q) list = PRODUCTS.filter(p=>inCat(p) && matchProd(p,fixed));
+  }
   if(!list.length){ $('prodGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:50px">ไม่พบสินค้า</div>`; return; }
   $('prodGrid').innerHTML = list.map(p=>{
     const st = p.stock<=0 ? 'out' : (p.stock<=(p.min_stock||0) ? 'low' : '');
@@ -635,17 +656,30 @@ function renderGrid(){
     </button>`;
   }).join('');
 }
+function lookupScan(q){
+  if(!q) return null;
+  return PRODUCTS.find(x=>x.active && x.barcode && x.barcode === q)
+      || PRODUCTS.find(x=>x.active && (x.sku||'').toLowerCase() === q.toLowerCase())
+      || (PRODUCTS.filter(x=>x.active && matchProd(x,q)).length === 1
+            ? PRODUCTS.filter(x=>x.active && matchProd(x,q))[0] : null);
+}
 function submitScan(){
-  const q = $('scanInput').value.trim();
-  if(!q) return;
-  let p = PRODUCTS.find(x=>x.active && x.barcode && x.barcode === q)
-       || PRODUCTS.find(x=>x.active && (x.sku||'').toLowerCase() === q.toLowerCase());
-  if(!p){
-    const hits = PRODUCTS.filter(x=>x.active && matchProd(x,q));
-    if(hits.length === 1) p = hits[0];
+  const raw = $('scanInput').value.trim();
+  if(!raw) return;
+  let p = lookupScan(raw), used = raw;
+  if(!p){                                   // ลองแปลงจากแป้นพิมพ์ไทย
+    const fixed = fixThai(raw);
+    if(fixed !== raw){
+      p = lookupScan(fixed);
+      if(p){ used = fixed; toast('แป้นพิมพ์เป็นภาษาไทย — ระบบแปลงรหัสให้แล้ว'); }
+    }
   }
   if(p){ addToCart(p.id); $('scanInput').value=''; renderGrid(); }
-  else { toast('ไม่พบสินค้า: ' + q, 'err'); if(navigator.vibrate) navigator.vibrate(200); }
+  else{
+    const fixed = fixThai(raw);
+    toast(fixed !== raw ? `ไม่พบสินค้า: ${fixed} (สลับแป้นพิมพ์เป็น EN ก่อนยิง)` : 'ไม่พบสินค้า: ' + raw, 'err');
+    if(navigator.vibrate) navigator.vibrate(200);
+  }
   focusScan();
 }
 
