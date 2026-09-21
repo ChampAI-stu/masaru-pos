@@ -189,14 +189,14 @@ tr:hover td{background:#FAFCFF}
   .g2,.g3{grid-template-columns:1fr}
   .tbl-wrap{max-height:none}
 }
-@page{ size:72mm auto; margin:0 }      /* ตัดหัว-ท้ายกระดาษของเบราว์เซอร์ + ตั้งความกว้างสลิป */
+/* ขนาดกระดาษถูกกำหนดตอนกดพิมพ์ ด้วย applyPrintSize() */
 @media print{
-  html,body{width:72mm;margin:0;padding:0}
+  html,body{margin:0;padding:0}
   body{overflow:visible;background:#fff}
   #app,#toast,.mask{display:none!important}
   #printArea{display:block!important}
 }
-#printArea{display:none;font-family:'Sarabun',sans-serif;width:72mm;margin:0;padding:4mm 3mm;font-size:12px;color:#000}
+#printArea{display:none;font-family:'Sarabun',sans-serif;width:72mm;margin:0;padding:3mm;font-size:12px;color:#000}
 #printArea h2{text-align:center;margin:4px 0;font-size:15px}
 #printArea .hd{text-align:center;font-size:13px;font-weight:600;line-height:1.5}
 #printArea .hd.brand{font-size:15px;font-weight:700;margin-top:2px}
@@ -224,7 +224,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v6</b> — หัวบิล 4 บรรทัด · เปิดรอบเลือกวันที่ · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v7</b> — หัวบิล 4 บรรทัด · เปิดรอบเลือกวันที่ · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -245,7 +245,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v6</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v7</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -1013,7 +1013,22 @@ function billHeaderHTML(){
   L.push(`<div class="hd brand">🙏 ${esc(b.name || 'MASARU POWERTOOLS')}</div>`);
   return L.join('');
 }
+const PAPER = {
+  label4x6: {label:'ป้าย 4×6 นิ้ว (RD 4"x6")',   page:'size:101.6mm 152.4mm; margin:3mm', w:'92mm',  fs:'11px'},
+  cont102 : {label:'ม้วนต่อเนื่อง 4 นิ้ว (102mm)', page:'size:102mm auto; margin:2mm',     w:'96mm',  fs:'12px'},
+  slip80  : {label:'สลิปความร้อน 80mm',           page:'size:80mm auto; margin:0',        w:'74mm',  fs:'12px'},
+  slip58  : {label:'สลิปความร้อน 58mm',           page:'size:58mm auto; margin:0',        w:'54mm',  fs:'10.5px'},
+  a4      : {label:'กระดาษ A4',                   page:'size:A4; margin:12mm',            w:'150mm', fs:'13px'}
+};
+function applyPrintSize(){
+  const k = (SETTINGS.print && SETTINGS.print.size) || 'label4x6';
+  const c = PAPER[k] || PAPER.label4x6;
+  let st = $('pgStyle');
+  if(!st){ st = document.createElement('style'); st.id = 'pgStyle'; document.head.appendChild(st); }
+  st.textContent = `@page{${c.page}} #printArea{width:${c.w};font-size:${c.fs}}`;
+}
 function printBill(s){
+  applyPrintSize();
   const b = SETTINGS.booth || {};
   $('printArea').innerHTML = `
     ${billHeaderHTML()}<hr>
@@ -1459,6 +1474,15 @@ function openAdmin(){
     <div class="fld" style="margin-top:10px"><label>ข้อความท้ายบิล</label><input id="stFooter" value="${esc(b.footer||'')}" placeholder="ขอบคุณที่อุดหนุน"></div>
     <div id="hdPreview" style="margin-top:10px;background:#fff;border:1px dashed var(--line);border-radius:9px;padding:10px;text-align:center;font-size:13px;line-height:1.6"></div>
 
+    <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🖨️ เครื่องพิมพ์</h4>
+    <div class="row">
+      <div class="fld" style="flex:1;min-width:220px"><label>ขนาดกระดาษ (ต้องตรงกับที่ตั้งในไดรเวอร์)</label>
+        <select id="stPaper">${Object.entries(PAPER).map(([k,v])=>
+          `<option value="${k}" ${((SETTINGS.print&&SETTINGS.print.size)||'label4x6')===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+      <button class="btn o sm" onclick="testPrint()">🖨 ทดสอบพิมพ์</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Brother TD-4420DN ที่ใช้อยู่เป็นเครื่องพิมพ์ป้าย — เลือกให้ตรงกับม้วนที่ใส่ในเครื่อง ไม่งั้นจะขึ้น "Paper cannot be fed"</p>
+
     <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🎁 โปรโมชั่น / ส่วนลดด่วน
       <button class="btn sm" style="float:right" onclick="addPromo()">+ เพิ่ม</button></h4>
     <div class="tbl-wrap" style="max-height:170px">
@@ -1531,6 +1555,16 @@ async function loadUsersInvites(){
     }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรหัสเชิญ</td></tr>`;
   }catch(e){ toast('โหลดผู้ใช้งานไม่สำเร็จ: '+e.message,'err'); }
 }
+function testPrint(){
+  if($('stPaper')) SETTINGS.print = {size: $('stPaper').value};
+  if($('stBoothName')) SETTINGS.booth = boothFromForm();
+  printBill({
+    billNo:'ทดสอบ-0001', cur:CUR,
+    items:[{name:'ทดสอบพิมพ์ — สินค้าตัวอย่าง', sku:'TEST-01', qty:1, unit_price:100, line_discount:0}],
+    c:{sub:100, disc:0, lineDisc:0, total:100},
+    pay:{method:'cash', paid:100}
+  });
+}
 function copyInvite(code){
   navigator.clipboard.writeText(code).then(()=>toast('คัดลอกรหัส '+code,'ok'), ()=>prompt('คัดลอกรหัสนี้:', code));
 }
@@ -1600,7 +1634,8 @@ function rmPromo(i){ SETTINGS.promos.splice(i,1); renderPromos(); renderPromoRow
 async function saveSettings(){
   const payload = [
     {key:'booth',    value: boothFromForm()},
-    {key:'promos',   value:SETTINGS.promos||[]}
+    {key:'promos',   value:SETTINGS.promos||[]},
+    {key:'print',    value:{size: $('stPaper') ? $('stPaper').value : 'label4x6'}}
   ];
   try{
     await sb('pos_settings?on_conflict=key', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body: JSON.stringify(payload)});
