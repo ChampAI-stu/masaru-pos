@@ -195,6 +195,8 @@ tr:hover td{background:#FAFCFF}
 }
 #printArea{display:none;font-family:'Sarabun',sans-serif;width:72mm;margin:0 auto;font-size:12px;color:#000}
 #printArea h2{text-align:center;margin:4px 0;font-size:15px}
+#printArea .hd{text-align:center;font-size:13px;font-weight:600;line-height:1.5}
+#printArea .hd.brand{font-size:15px;font-weight:700;margin-top:2px}
 #printArea .c{text-align:center} #printArea .rr{display:flex;justify-content:space-between}
 #printArea table{font-size:11px} #printArea td{padding:2px 0;border:none}
 #printArea hr{border:none;border-top:1px dashed #000;margin:6px 0}
@@ -606,13 +608,19 @@ async function signOut(){
 async function startApp(){
   $('hUser').textContent = USER;
   const b = SETTINGS.booth || {};
-  $('hBooth').textContent = (b.name || 'MASARU BOOTH') + (b.location ? ' · ' + b.location : '');
+  $('hBooth').textContent = boothLine();
   CUR = (SETTINGS.currency && SETTINGS.currency.primary) || CUR;
   setCurrency(CUR, true);
   if(localStorage.getItem('masaru_pos_compact')) $('prodGrid').classList.add('compact');
   await Promise.all([loadProducts(), loadSession()]);
   quickRange(0);
   focusScan();
+}
+
+function boothLine(){
+  const b = SETTINGS.booth || {};
+  return [b.event, b.booth_no ? 'บูธ ' + b.booth_no : '', b.location].filter(Boolean).join(' · ')
+         || (b.name || 'MASARU BOOTH');
 }
 
 /* ---------------- tabs ---------------- */
@@ -841,30 +849,48 @@ async function loadSession(){
   const rows = await sb('pos_sessions?status=eq.open&select=*&order=opened_at.desc&limit=1');
   SESSION = rows[0] || null;
   $('sessDot').className = 'dot' + (SESSION?' live':'');
-  $('sessTxt').textContent = SESSION ? SESSION.session_code : 'ยังไม่เปิดรอบ';
+  if(SESSION){
+    const d = new Date(SESSION.opened_at);
+    $('sessTxt').textContent = 'รอบ ' + d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    $('sessBtn').title = SESSION.session_code + ' · เปิด ' + fmtDT(SESSION.opened_at);
+  }else{
+    $('sessTxt').textContent = 'ยังไม่เปิดรอบ';
+    $('sessBtn').title = 'กดเพื่อเปิดรอบขาย';
+  }
 }
 function openSessionModal(){
   if(SESSION){
     modal('ปิดรอบขาย', `
       <div class="fld"><label>รอบ</label><input value="${esc(SESSION.session_code)}" disabled></div>
-      <div class="fld" style="margin-top:8px"><label>เปิดเมื่อ</label><input value="${fmtDT(SESSION.opened_at)}" disabled></div>
+      <div class="g2" style="margin-top:8px">
+        <div class="fld"><label>วันที่เปิดรอบ</label><input value="${new Date(SESSION.opened_at).toLocaleDateString('th-TH',{dateStyle:'long'})}" disabled></div>
+        <div class="fld"><label>เปิดเมื่อ</label><input value="${fmtDT(SESSION.opened_at)}" disabled></div>
+      </div>
       <div class="fld" style="margin-top:8px"><label>เงินสดนับได้จริงตอนปิดรอบ</label><input type="number" id="csCash" placeholder="0"></div>
       <div class="fld" style="margin-top:8px"><label>หมายเหตุ</label><input id="csNote"></div>
       <p style="font-size:12.5px;color:var(--muted);margin-top:10px">ปิดรอบแล้วดูสรุปยอดได้ที่แท็บรายงาน</p>`,
       [{t:'ยกเลิก',c:'o',f:closeModal},{t:'ปิดรอบ',c:'r',f:closeSession}]);
   }else{
     modal('เปิดรอบขาย', `
-      <div class="fld"><label>เงินสดตั้งต้นในลิ้นชัก</label><input type="number" id="osCash" value="0"></div>
-      <div class="fld" style="margin-top:8px"><label>หมายเหตุ</label><input id="osNote" placeholder="เช่น บูธงานแสดงสินค้า วันที่ 1"></div>`,
+      <div class="fld"><label>วันที่เปิดรอบ</label><input type="date" id="osDate" value="${todayStr()}"></div>
+      <div class="fld" style="margin-top:8px"><label>เงินสดตั้งต้นในลิ้นชัก</label><input type="number" id="osCash" value="0"></div>
+      <div class="fld" style="margin-top:8px"><label>หมายเหตุ</label><input id="osNote" placeholder="เช่น วันแรกของงาน"></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:10px">ตั้งย้อนหลัง/ล่วงหน้าได้ ถ้าลืมเปิดรอบไว้ตั้งแต่วันแรก</p>`,
       [{t:'ยกเลิก',c:'o',f:closeModal},{t:'เปิดรอบ',c:'g',f:openSession}]);
   }
 }
 async function openSession(){
   try{
-    const code = 'S' + new Date().toLocaleDateString('sv-SE').replace(/-/g,'').slice(2) + '-' + String(Date.now()).slice(-4);
+    const d = $('osDate').value || todayStr();
+    const now = new Date();
+    const openedAt = (d === todayStr())
+      ? now                                            // วันนี้ = ใช้เวลาจริง
+      : new Date(d + 'T09:00:00');                     // ย้อนหลัง/ล่วงหน้า = 09:00 ของวันนั้น
+    const code = 'S' + d.replace(/-/g,'').slice(2) + '-' + String(Date.now()).slice(-4);
     const r = await sb('pos_sessions', {method:'POST', body: JSON.stringify({
-      session_code: code, booth_name:(SETTINGS.booth||{}).name || 'MASARU BOOTH',
-      opened_by: USER, cash_start: Number($('osCash').value)||0,
+      session_code: code, booth_name: boothLine(),
+      opened_by: USER, opened_at: openedAt.toISOString(),
+      cash_start: Number($('osCash').value)||0,
       currency: CUR, note: $('osNote').value || null, status:'open'
     })});
     SESSION = r[0]; closeModal(); await loadSession(); toast('เปิดรอบ ' + SESSION.session_code,'ok');
@@ -974,13 +1000,21 @@ function showSuccess(s){
     [{t:'🖨 พิมพ์บิล',c:'o',f:()=>printBill(s)},{t:'ขายต่อ',c:'g',f:()=>{closeModal();focusScan();}}]);
   setTimeout(()=>{ const b=document.querySelector('.mfoot .btn.g'); if(b) b.focus(); }, 100);
 }
+function billHeaderHTML(){
+  const b = SETTINGS.booth || {};
+  const L = [];
+  if(b.event)    L.push(`<div class="hd">🐥 งาน ${esc(b.event)}</div>`);
+  if(b.location) L.push(`<div class="hd">📍 ${esc(b.location)}</div>`);
+  if(b.booth_no) L.push(`<div class="hd">🎪 เลขที่บูธ : ${esc(b.booth_no)}</div>`);
+  L.push(`<div class="hd brand">🙏 ${esc(b.name || 'MASARU POWERTOOLS')}</div>`);
+  return L.join('');
+}
 function printBill(s){
   const b = SETTINGS.booth || {};
   $('printArea').innerHTML = `
-    <h2>${esc(b.name||'MASARU BOOTH')}</h2>
-    <div class="c">${esc(b.location||'')}</div><hr>
-    <div class="rr"><span>บิล</span><span>${esc(s.billNo||'-')}</span></div>
-    <div class="rr"><span>วันที่</span><span>${new Date().toLocaleString('th-TH')}</span></div>
+    ${billHeaderHTML()}<hr>
+    <div class="rr"><span>วันที่</span><span>${new Date().toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span></div>
+    <div class="rr"><span>เลขที่บิล</span><span>${esc(s.billNo||'-')}</span></div>
     <div class="rr"><span>ผู้ขาย</span><span>${esc(USER)}</span></div><hr>
     <table>${s.items.map(i=>`<tr><td colspan="2">${esc(i.name)}</td></tr>
       <tr><td>${i.qty} x ${money(i.unit_price,s.cur)}</td><td style="text-align:right">${money((i.unit_price-(i.line_discount||0))*i.qty,s.cur)}</td></tr>`).join('')}</table><hr>
@@ -1411,12 +1445,15 @@ function openAdmin(){
       เข้าใช้งานเป็น <b>${esc(USER)}</b>${ME&&ME.email?` · ${esc(ME.email)}`:''}
     </div>
 
-    <h4 style="margin:0 0 8px;font-size:14px;color:var(--navy)">🏪 ข้อมูลบูธ (ใช้บนหัวบิล)</h4>
-    <div class="g2">
-      <div class="fld"><label>ชื่อบูธ</label><input id="stBoothName" value="${esc(b.name||'')}"></div>
-      <div class="fld"><label>สถานที่</label><input id="stBoothLoc" value="${esc(b.location||'')}"></div>
+    <h4 style="margin:0 0 8px;font-size:14px;color:var(--navy)">🏪 หัวบิล</h4>
+    <div class="fld"><label>🐥 ชื่องาน</label><input id="stEvent" value="${esc(b.event||'')}" placeholder="FIN FIN FOOD 2026"></div>
+    <div class="fld" style="margin-top:10px"><label>📍 สถานที่</label><input id="stBoothLoc" value="${esc(b.location||'')}" placeholder="ลานหน้าห้าง ITECC MALL ตึกใหม่"></div>
+    <div class="g2" style="margin-top:10px">
+      <div class="fld"><label>🎪 เลขที่บูธ</label><input id="stBoothNo" value="${esc(b.booth_no||'')}" placeholder="B41-B42"></div>
+      <div class="fld"><label>🙏 ชื่อร้าน</label><input id="stBoothName" value="${esc(b.name||'')}" placeholder="MASARU POWERTOOLS"></div>
     </div>
-    <div class="fld" style="margin-top:10px"><label>ข้อความท้ายบิล</label><input id="stFooter" value="${esc(b.footer||'')}"></div>
+    <div class="fld" style="margin-top:10px"><label>ข้อความท้ายบิล</label><input id="stFooter" value="${esc(b.footer||'')}" placeholder="ขอบคุณที่อุดหนุน"></div>
+    <div id="hdPreview" style="margin-top:10px;background:#fff;border:1px dashed var(--line);border-radius:9px;padding:10px;text-align:center;font-size:13px;line-height:1.6"></div>
 
     <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🎁 โปรโมชั่น / ส่วนลดด่วน
       <button class="btn sm" style="float:right" onclick="addPromo()">+ เพิ่ม</button></h4>
@@ -1446,6 +1483,19 @@ function openAdmin(){
     [{t:'ปิด',c:'o',f:closeModal},{t:'💾 บันทึก',c:'g',f:saveSettings}], 'wide');
   renderPromos();
   loadUsersInvites();
+  ['stEvent','stBoothLoc','stBoothNo','stBoothName'].forEach(id=>{
+    const el = $(id); if(el) el.oninput = hdPreview;
+  });
+  hdPreview();
+}
+function hdPreview(){
+  const el = $('hdPreview'); if(!el) return;
+  const L = [];
+  if($('stEvent').value.trim())    L.push('🐥 งาน ' + esc($('stEvent').value.trim()));
+  if($('stBoothLoc').value.trim()) L.push('📍 ' + esc($('stBoothLoc').value.trim()));
+  if($('stBoothNo').value.trim())  L.push('🎪 เลขที่บูธ : ' + esc($('stBoothNo').value.trim()));
+  L.push('<b>🙏 ' + esc($('stBoothName').value.trim() || 'MASARU POWERTOOLS') + '</b>');
+  el.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">ตัวอย่างหัวบิล</div>` + L.join('<br>');
 }
 
 /* ---------------- ผู้ใช้งาน & รหัสเชิญ ---------------- */
@@ -1519,9 +1569,13 @@ function renderPromos(){
     <td><button class="btn o sm" onclick="rmPromo(${i})">ลบ</button></td></tr>`).join('')
     || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีโปรโมชั่น</td></tr>`;
 }
+function boothFromForm(){
+  return {event:$('stEvent').value.trim(), location:$('stBoothLoc').value.trim(),
+          booth_no:$('stBoothNo').value.trim(), name:$('stBoothName').value.trim(),
+          footer:$('stFooter').value.trim()};
+}
 function stashBooth(){   // เก็บค่าที่พิมพ์ค้างไว้ ก่อนเปิด modal ซ้อน
-  if(!$('stBoothName')) return;
-  SETTINGS.booth = {name:$('stBoothName').value.trim(), location:$('stBoothLoc').value.trim(), footer:$('stFooter').value.trim()};
+  if($('stBoothName')) SETTINGS.booth = boothFromForm();
 }
 function addPromo(){
   stashBooth();
@@ -1541,14 +1595,13 @@ function addPromo(){
 function rmPromo(i){ SETTINGS.promos.splice(i,1); renderPromos(); renderPromoRow(); }
 async function saveSettings(){
   const payload = [
-    {key:'booth',    value:{name:$('stBoothName').value.trim(), location:$('stBoothLoc').value.trim(), footer:$('stFooter').value.trim()}},
+    {key:'booth',    value: boothFromForm()},
     {key:'promos',   value:SETTINGS.promos||[]}
   ];
   try{
     await sb('pos_settings?on_conflict=key', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body: JSON.stringify(payload)});
     payload.forEach(p=>SETTINGS[p.key]=p.value);
-    const b = SETTINGS.booth||{};
-    $('hBooth').textContent = (b.name||'MASARU BOOTH') + (b.location?' · '+b.location:'');
+    $('hBooth').textContent = boothLine();
     renderPromoRow(); toast('บันทึกการตั้งค่าแล้ว','ok');
   }catch(e){ toast(e.message,'err'); }
 }
