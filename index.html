@@ -229,7 +229,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v10</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v11</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -250,7 +250,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v10</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v11</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -317,6 +317,7 @@ tr:hover td{background:#FAFCFF}
           <button class="btn o sm" onclick="document.getElementById('bulkImgFile').click()">🖼 อัปรูปหลายไฟล์</button>
           <button class="btn o sm" onclick="document.getElementById('impFile').click()">⬆ นำเข้า Excel/CSV</button>
           <button class="btn o sm" onclick="exportProducts()">⬇ ส่งออก</button>
+          <button class="btn o sm" onclick="maybeRefreshProducts(true).then(()=>toast('อัปเดตสต๊อกจากเซิร์ฟเวอร์แล้ว','ok'))">🔄 รีเฟรช</button>
           <input type="file" id="impFile" class="hide" accept=".csv,.xlsx,.xls" onchange="importProducts(this)">
           <input type="file" id="bulkImgFile" class="hide" accept="image/*" multiple onchange="bulkImages(this)">
         </h3>
@@ -497,12 +498,30 @@ function renderNet(){
 function setOffline(v){ OFFLINE = v; renderNet(); }
 window.addEventListener('online',  ()=>{ setOffline(false); toast('เน็ตกลับมาแล้ว — กำลังซิงก์','ok'); syncQueue(true); });
 window.addEventListener('offline', ()=>{ setOffline(true);  toast('เน็ตหลุด — เข้าโหมดออฟไลน์ ขายต่อได้ปกติ'); });
-setInterval(()=>{ if(navigator.onLine && getQ().length && !SYNCING) syncQueue(true); }, 60000);
+setInterval(()=>{
+  if(!navigator.onLine || SYNCING) return;
+  if(getQ().some(x=>!x.error)) syncQueue(true);   // มีบิลที่ยังรอส่งจริง ๆ เท่านั้นถึงยิง
+}, 60000);
 
 function localBillNo(){
   const day = todayStr().replace(/-/g,'').slice(2);
   const n = getQ().filter(x => x.day === day).length + 1;
   return 'OFF' + day + '-' + String(n).padStart(3,'0');
+}
+let lastProdSync = 0;
+function applyLocalStock(items){
+  items.forEach(it=>{
+    const p = PRODUCTS.find(x=>x.id===it.product_id);
+    if(p) p.stock = Math.max(0, p.stock - it.qty);
+  });
+  lsSet(CK.prod, PRODUCTS);
+  renderGrid(); renderStock();
+}
+/* ดึงรายการสินค้าใหม่ได้ไม่เกิน 1 ครั้ง/2 นาที — กันโหลดซ้ำทุกบิล */
+async function maybeRefreshProducts(force){
+  if(!navigator.onLine) return;
+  if(!force && Date.now() - lastProdSync < 120000) return;
+  try{ await loadProducts(); }catch(e){}
 }
 function queueSale(payload, c){
   const day = todayStr().replace(/-/g,'').slice(2);
@@ -510,13 +529,8 @@ function queueSale(payload, c){
   const q = getQ();
   q.push({day, billNo, at:new Date().toISOString(), total:c.total, cur:CUR, payload});
   setQ(q);
-  // ตัดสต๊อกในเครื่องไว้ก่อน เพื่อไม่ให้ขายเกิน
-  payload.items.forEach(it=>{
-    const p = PRODUCTS.find(x=>x.id===it.product_id);
-    if(p) p.stock = Math.max(0, p.stock - it.qty);
-  });
-  lsSet(CK.prod, PRODUCTS);
-  renderNet(); renderGrid(); renderStock();
+  applyLocalStock(payload.items);   // ตัดสต๊อกในเครื่องไว้ก่อน กันขายเกิน
+  renderNet();
   return billNo;
 }
 async function syncQueue(silent){
@@ -527,6 +541,7 @@ async function syncQueue(silent){
   SYNCING = true;
   let ok = 0, bad = 0; const rest = [];
   for(const item of q){
+    if(silent && item.error){ rest.push(item); continue; }   // ไม่วนยิงซ้ำบิลที่เซิร์ฟเวอร์ปฏิเสธ
     try{ await rpc('pos_checkout', {p: item.payload}); ok++; }
     catch(e){
       if(isNetErr(e)){ rest.push(item); }                 // เน็ตหลุดกลางทาง เก็บไว้ลองใหม่
@@ -535,7 +550,7 @@ async function syncQueue(silent){
   }
   setQ(rest); SYNCING = false;
   setOffline(!navigator.onLine);
-  if(ok){ try{ await loadProducts(); await loadSession(); }catch(e){} }
+  if(ok){ try{ await maybeRefreshProducts(true); }catch(e){} }
   renderNet();
   if(ok || bad || !silent)
     toast(`ซิงก์ ${ok} บิล${bad?` · ติดปัญหา ${bad} บิล`:''}`, bad ? 'err' : 'ok');
@@ -771,6 +786,7 @@ async function loadProducts(){
   try{
     PRODUCTS = await sbAll('pos_products?select=*&order=sku.asc');
     lsSet(CK.prod, PRODUCTS);
+    lastProdSync = Date.now();
     setOffline(false);
   }catch(e){
     const c = lsGet(CK.prod, null);
@@ -1110,6 +1126,7 @@ async function doCheckout(){
       const r = await rpc('pos_checkout', {p: payload});
       billNo = r.bill_no || (r[0] && r[0].bill_no);
       setOffline(false);
+      applyLocalStock(payload.items);     // ตัดในเครื่องเลย ไม่ดาวน์โหลดสินค้าทั้งตารางซ้ำ
     }catch(err){
       if(!isNetErr(err)) throw err;              // error จากเซิร์ฟเวอร์ (เช่นสต๊อกไม่พอ) = ไม่เข้าคิว
       billNo = queueSale(payload, c);            // เน็ตหลุด = เก็บเข้าคิว ขายต่อได้เลย
@@ -1118,7 +1135,7 @@ async function doCheckout(){
     const snapshot = {billNo, cur:CUR, items:[...CART], c, pay:{...PAY}, offline};
     CART = []; PROMO = null; BILLDISC = {type:'percent', value:0};
     closeModal(); renderCart();
-    if(!offline){ try{ await loadProducts(); }catch(e){} }
+    if(!offline) maybeRefreshProducts();   // เช็คของจริงกับเซิร์ฟเวอร์ อย่างมาก 1 ครั้ง/2 นาที
     showSuccess(snapshot);
   }catch(e){
     toast('บันทึกไม่สำเร็จ: ' + e.message, 'err');
