@@ -89,7 +89,20 @@ main{flex:1;overflow:hidden;position:relative}
 .qty button{width:30px;height:30px;font-size:16px;font-weight:600;color:var(--navy);background:#F6F8FB}
 .qty input{width:44px;height:30px;text-align:center;border:none;outline:none;font-weight:600;border-left:1px solid var(--line);border-right:1px solid var(--line)}
 .citem .lt{margin-left:auto;font-weight:700;font-size:14.5px}
-.citem .dsc{font-size:11.5px;color:var(--blue);background:none;text-decoration:underline}
+.citem .r3{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.miniF{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);font-weight:500}
+.miniF input{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;text-align:right;
+  font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;outline:none;background:#fff}
+.miniF input:focus{border-color:var(--blue)}
+.miniF input.edited{border-color:var(--gold);background:#FFFAEE;color:#8A6D1F}
+.citem .reset{font-size:11px;color:var(--blue);text-decoration:underline;background:none}
+.disc-row{display:flex;align-items:center;gap:6px;margin:10px 0 6px}
+.disc-row label{font-size:12.5px;color:var(--muted);font-weight:500;white-space:nowrap}
+.disc-row select{padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff;outline:none}
+.disc-row input{flex:1;min-width:60px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+  text-align:right;font-weight:700;font-variant-numeric:tabular-nums;outline:none}
+.disc-row input:focus{border-color:var(--blue)}
+.disc-row input.on{border-color:var(--danger);background:#FFF5F5;color:var(--danger)}
 .cart-empty{text-align:center;color:var(--muted);padding:50px 20px;font-size:14px}
 .cart-foot{border-top:1px solid var(--line);padding:12px 14px;background:#FAFBFD}
 .ln{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;color:var(--muted)}
@@ -266,7 +279,16 @@ tr:hover td{background:#FAFCFF}
         <div class="cart-items" id="cartItems"></div>
         <div class="cart-foot">
           <div class="promo-row" id="promoRow"></div>
+          <div class="disc-row">
+            <label>ส่วนลดท้ายบิล</label>
+            <select id="billDiscType" onchange="setBillDisc()">
+              <option value="percent">%</option>
+              <option value="amount">จำนวนเงิน</option>
+            </select>
+            <input type="number" id="billDiscVal" value="0" min="0" step="1" onfocus="this.select()" oninput="setBillDisc()">
+          </div>
           <div class="ln"><span>ยอดรวม</span><b id="sumSub">0</b></div>
+          <div class="ln disc" id="sumLineDiscLn" style="display:none"><span>ส่วนลดรายชิ้น</span><b id="sumLineDisc">0</b></div>
           <div class="ln disc" id="sumDiscLn" style="display:none"><span id="sumDiscLbl">ส่วนลด</span><b id="sumDisc">0</b></div>
           <div class="ln total"><span>ยอดสุทธิ</span><b id="sumTotal">0</b></div>
           <button class="pay-btn" id="payBtn" onclick="openPay()" disabled>ชำระเงิน (F2)</button>
@@ -361,6 +383,7 @@ let USER    = localStorage.getItem(LS.user) || '';
 let CUR     = localStorage.getItem(LS.cur) || 'LAK';
 
 let PRODUCTS = [], CART = [], SETTINGS = {}, SESSION = null, PROMO = null;
+let BILLDISC = {type:'percent', value:0};
 let REPORT = {sales:[], items:[]};
 let CAT = 'all';
 
@@ -612,9 +635,10 @@ function setCurrency(c, silent){
   // ราคาในตะกร้าคำนวณใหม่ตามสกุลที่เลือก
   CART.forEach(it=>{
     const p = PRODUCTS.find(x=>x.id===it.product_id);
-    if(p) it.unit_price = priceOf(p);
+    if(p){ it.unit_price = priceOf(p); it.base_price = priceOf(p); }
     it.line_discount = 0;
   });
+  if(BILLDISC.type === 'amount') BILLDISC.value = 0;   // ส่วนลดเป็นจำนวนเงิน ใช้ข้ามสกุลไม่ได้
   renderGrid(); renderCart();
   if(!silent) toast('เปลี่ยนเป็นสกุล ' + (c==='LAK'?'กีบ (LAK)':'บาท (THB)'));
 }
@@ -693,7 +717,7 @@ function addToCart(pid){
     ex.qty++;
   }else{
     CART.push({product_id:p.id, sku:p.sku, barcode:p.barcode, name:p.name, image_url:p.image_url,
-               qty:1, unit_price:priceOf(p), line_discount:0, stock:p.stock});
+               qty:1, unit_price:priceOf(p), base_price:priceOf(p), line_discount:0, stock:p.stock});
   }
   renderCart();
   if(window.innerWidth<=900) $('cartPanel').classList.add('open');
@@ -707,37 +731,60 @@ function setQty(pid, v){
   it.qty = v; renderCart();
 }
 function rmItem(pid){ CART = CART.filter(i=>i.product_id!==pid); renderCart(); }
-function clearCart(){ if(!CART.length) return; if(!confirm('ล้างตะกร้าทั้งหมด?')) return; CART=[]; PROMO=null; renderCart(); focusScan(); }
-function lineDiscount(pid){
+function clearCart(){ if(!CART.length) return; if(!confirm('ล้างตะกร้าทั้งหมด?')) return; CART=[]; PROMO=null; BILLDISC={type:'percent',value:0}; renderCart(); focusScan(); }
+function setPrice(pid, v){
   const it = CART.find(i=>i.product_id===pid); if(!it) return;
-  const v = prompt(`ส่วนลดของ "${it.name}" (ต่อ 1 ชิ้น, หน่วย ${CUR==='LAK'?'กีบ':'บาท'})\nใส่ 0 เพื่อยกเลิก`, it.line_discount||0);
-  if(v===null) return;
-  const n = Math.max(0, Math.min(Number(v)||0, it.unit_price));
+  let n = Math.max(0, Number(v)||0);
+  if(CUR==='LAK') n = Math.round(n);
+  it.unit_price = n;
+  if(it.line_discount > n) it.line_discount = n;
+  renderCart();
+}
+function setLineDisc(pid, v){
+  const it = CART.find(i=>i.product_id===pid); if(!it) return;
+  let n = Math.max(0, Math.min(Number(v)||0, it.unit_price));
+  if(CUR==='LAK') n = Math.round(n);
   it.line_discount = n; renderCart();
 }
+function resetPrice(pid){
+  const it = CART.find(i=>i.product_id===pid); if(!it) return;
+  it.unit_price = it.base_price; it.line_discount = 0; renderCart();
+}
+function setBillDisc(){
+  BILLDISC = {type: $('billDiscType').value, value: Math.max(0, Number($('billDiscVal').value)||0)};
+  PROMO = null;                      // พิมพ์เองแล้ว = เลิกใช้ปุ่มโปร
+  renderCart(true);
+}
 function calc(){
-  let sub = 0;
-  CART.forEach(i => sub += (i.unit_price - (i.line_discount||0)) * i.qty);
-  let disc = 0, lbl = 'ส่วนลด';
-  if(PROMO){
-    if(PROMO.type==='percent'){ disc = sub * (Number(PROMO.value)||0) / 100; lbl = `ส่วนลด ${PROMO.name} (${PROMO.value}%)`; }
-    else { disc = Number(PROMO.value)||0; lbl = `ส่วนลด ${PROMO.name}`; }
-    if(PROMO.min_total && sub < Number(PROMO.min_total)){ disc = 0; lbl = `${PROMO.name} (ยอดยังไม่ถึงขั้นต่ำ)`; }
+  let sub = 0, lineDisc = 0;
+  CART.forEach(i => {
+    sub += (i.unit_price - (i.line_discount||0)) * i.qty;
+    lineDisc += (i.line_discount||0) * i.qty;
+  });
+  let disc = 0, lbl = 'ส่วนลดท้ายบิล';
+  const d = BILLDISC;
+  if(d.value > 0){
+    disc = d.type==='percent' ? sub * d.value / 100 : d.value;
+    lbl = PROMO ? `ส่วนลด ${PROMO.name}` : (d.type==='percent' ? `ส่วนลดท้ายบิล ${d.value}%` : 'ส่วนลดท้ายบิล');
+    if(PROMO && PROMO.min_total && sub < Number(PROMO.min_total)){ disc = 0; lbl = `${PROMO.name} (ยอดยังไม่ถึงขั้นต่ำ)`; }
   }
   disc = Math.min(disc, sub);
-  if(CUR==='LAK'){ sub = Math.round(sub); disc = Math.round(disc); }
-  return {sub, disc, lbl, total: Math.max(sub - disc, 0)};
+  if(CUR==='LAK'){ sub = Math.round(sub); disc = Math.round(disc); lineDisc = Math.round(lineDisc); }
+  return {sub, disc, lbl, lineDisc, total: Math.max(sub - disc, 0)};
 }
-function renderCart(){
+function renderCart(keepDiscFocus){
   const box = $('cartItems');
+  const step = CUR==='LAK' ? '1' : '0.01';
   if(!CART.length){
     box.innerHTML = `<div class="cart-empty">ยังไม่มีสินค้า<br><small>ยิงบาร์โค้ด หรือกดที่การ์ดสินค้า</small></div>`;
   }else{
-    box.innerHTML = CART.map(i=>`
+    box.innerHTML = CART.map(i=>{
+      const changed = Number(i.unit_price) !== Number(i.base_price);
+      return `
       <div class="citem">
         <div class="r1">
           <div class="thumb" ${i.image_url?`style="background-image:url('${esc(i.image_url)}')"`:''}>${i.image_url?'':'📦'}</div>
-          <div class="nm">${esc(i.name)}<small>${esc(i.sku)} · ${money(i.unit_price)}${i.line_discount?` <span style="color:var(--danger)">−${money(i.line_discount)}</span>`:''}</small></div>
+          <div class="nm">${esc(i.name)}<small>${esc(i.sku)}${changed?` · ราคาตั้งต้น ${money(i.base_price)} <button class="reset" onclick="resetPrice(${i.product_id})">คืนค่า</button>`:''}</small></div>
           <button class="rm" onclick="rmItem(${i.product_id})">✕</button>
         </div>
         <div class="r2">
@@ -746,19 +793,34 @@ function renderCart(){
             <input type="number" value="${i.qty}" onchange="setQty(${i.product_id}, this.value)">
             <button onclick="setQty(${i.product_id}, ${i.qty+1})">+</button>
           </div>
-          <button class="dsc" onclick="lineDiscount(${i.product_id})">ลดราคา</button>
           <span class="lt">${money((i.unit_price-(i.line_discount||0))*i.qty)}</span>
         </div>
-      </div>`).join('');
+        <div class="r3">
+          <span class="miniF">ราคา
+            <input type="number" step="${step}" min="0" class="${changed?'edited':''}" value="${i.unit_price}"
+                   onfocus="this.select()" onchange="setPrice(${i.product_id}, this.value)"></span>
+          <span class="miniF">ลด/ชิ้น
+            <input type="number" step="${step}" min="0" class="${i.line_discount?'edited':''}" value="${i.line_discount||0}"
+                   onfocus="this.select()" onchange="setLineDisc(${i.product_id}, this.value)"></span>
+        </div>
+      </div>`;
+    }).join('');
   }
   const c = calc();
   $('cartCnt').textContent = CART.reduce((s,i)=>s+i.qty,0);
   $('sumSub').textContent = money(c.sub);
+  $('sumLineDiscLn').style.display = c.lineDisc>0 ? 'flex':'none';
+  $('sumLineDisc').textContent = '− ' + money(c.lineDisc);
   $('sumDiscLn').style.display = c.disc>0 ? 'flex':'none';
   $('sumDiscLbl').textContent = c.lbl;
   $('sumDisc').textContent = '− ' + money(c.disc);
   $('sumTotal').textContent = money(c.total);
   $('payBtn').disabled = !CART.length;
+  if(!keepDiscFocus){
+    $('billDiscType').value = BILLDISC.type;
+    $('billDiscVal').value = BILLDISC.value;
+  }
+  $('billDiscVal').classList.toggle('on', BILLDISC.value > 0);
   renderPromoRow();
 }
 function renderPromoRow(){
@@ -769,7 +831,8 @@ function renderPromoRow(){
 }
 function togglePromo(i){
   const p = (SETTINGS.promos||[])[i];
-  PROMO = (PROMO && PROMO.name===p.name) ? null : p;
+  if(PROMO && PROMO.name===p.name){ PROMO = null; BILLDISC = {type:'percent', value:0}; }
+  else { PROMO = p; BILLDISC = {type:p.type, value:Number(p.value)||0}; }
   renderCart();
 }
 
@@ -874,8 +937,9 @@ async function doCheckout(){
   try{
     const payload = {
       session_id: SESSION ? SESSION.id : null, cashier: USER, currency: CUR,
-      subtotal: c.sub, discount_type: PROMO ? PROMO.type : 'none',
-      discount_value: PROMO ? Number(PROMO.value)||0 : 0, discount_amount: c.disc,
+      subtotal: c.sub,
+      discount_type: BILLDISC.value > 0 ? BILLDISC.type : 'none',
+      discount_value: BILLDISC.value, discount_amount: c.disc,
       total: c.total, payment_method: PAY.method,
       paid: PAY.method==='cash' ? PAY.paid : c.total,
       change_amount: PAY.method==='cash' ? Math.max(PAY.paid - c.total, 0) : 0,
@@ -889,7 +953,7 @@ async function doCheckout(){
     const r = await rpc('pos_checkout', {p: payload});
     const billNo = r.bill_no || (r[0] && r[0].bill_no);
     const snapshot = {billNo, cur:CUR, items:[...CART], c, pay:{...PAY}};
-    CART = []; PROMO = null;
+    CART = []; PROMO = null; BILLDISC = {type:'percent', value:0};
     closeModal(); renderCart();
     await loadProducts();
     showSuccess(snapshot);
