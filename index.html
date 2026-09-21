@@ -235,14 +235,13 @@ tr:hover td{background:#FAFCFF}
       <button id="curTHB" onclick="setCurrency('THB')">฿ บาท</button>
     </div>
     <button class="hbtn" id="sessBtn" onclick="openSessionModal()"><span class="dot" id="sessDot"></span><span id="sessTxt">ยังไม่เปิดรอบ</span></button>
-    <button class="hbtn" onclick="signOut()" title="ออกจากระบบ">👤 <span id="hUser"></span></button>
+    <button class="hbtn" onclick="openAdmin()" title="จัดการระบบ">👤 <span id="hUser"></span></button>
   </header>
 
   <nav>
     <button class="on" data-tab="pos" onclick="tab('pos')">🛒 ขายหน้าบูธ</button>
     <button data-tab="stock" onclick="tab('stock')">📦 สต๊อกสินค้า</button>
     <button data-tab="report" onclick="tab('report')">📊 รายงาน / ปิดรอบ</button>
-    <button data-tab="setting" onclick="tab('setting')">⚙️ ตั้งค่า</button>
   </nav>
 
   <main>
@@ -338,53 +337,6 @@ tr:hover td{background:#FAFCFF}
       </div>
     </section>
 
-    <!-- ---------- SETTING ---------- -->
-    <section class="page hide" id="pg-setting">
-      <div class="card">
-        <h3>🏪 ข้อมูลบูธ</h3>
-        <div class="g2">
-          <div class="fld"><label>ชื่อบูธ</label><input id="stBoothName"></div>
-          <div class="fld"><label>สถานที่</label><input id="stBoothLoc"></div>
-        </div>
-        <div class="fld" style="margin-top:10px"><label>ข้อความท้ายบิล</label><input id="stFooter"></div>
-      </div>
-      <div class="card">
-        <h3>💱 สกุลเงิน</h3>
-        <div class="g2">
-          <div class="fld"><label>สกุลหลัก</label><select id="stCurPrimary"><option value="LAK">กีบ (LAK)</option><option value="THB">บาท (THB)</option></select></div>
-          <div class="fld"><label>อัตราแลกเปลี่ยน 1 บาท = ? กีบ</label><input type="number" id="stRate" step="1"></div>
-        </div>
-        <p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">ใช้สำหรับคำนวณราคากีบอัตโนมัติเมื่อเพิ่มสินค้าใหม่ — ราคาที่ import มาแล้วจะไม่ถูกแก้</p>
-      </div>
-      <div class="card">
-        <h3>🎁 โปรโมชั่น / ส่วนลดด่วน <span class="sp"></span><button class="btn sm" onclick="addPromo()">+ เพิ่ม</button></h3>
-        <div class="tbl-wrap" style="max-height:260px">
-          <table><thead><tr><th>ชื่อโปร</th><th>ประเภท</th><th class="num">ค่า</th><th class="num">ยอดขั้นต่ำ</th><th></th></tr></thead>
-          <tbody id="promoBody"></tbody></table>
-        </div>
-      </div>
-      <div class="card">
-        <h3>🎟️ รหัสเชิญ (ใช้สมัครผู้ใช้ใหม่) <span class="sp"></span>
-          <button class="btn sm" onclick="addInvite()">+ สร้างรหัสเชิญ</button>
-          <button class="btn o sm" onclick="loadUsersInvites()">🔄</button></h3>
-        <div class="tbl-wrap" style="max-height:260px">
-          <table><thead><tr><th>รหัส</th><th>ป้ายกำกับ</th><th class="num">ใช้แล้ว / สูงสุด</th><th>หมดอายุ</th><th>สถานะ</th><th></th></tr></thead>
-          <tbody id="inviteBody"></tbody></table>
-        </div>
-      </div>
-      <div class="card">
-        <h3>👥 ผู้ใช้งานในระบบ</h3>
-        <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">ทุกคนที่ล็อกอินได้เข้าถึงทุกเมนูเท่ากัน (ไม่มีการแบ่งสิทธิ์) — ลูกค้าเข้าไม่ได้เพราะไม่มีบัญชี</p>
-        <div class="tbl-wrap" style="max-height:260px">
-          <table><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>สมัครเมื่อ</th></tr></thead>
-          <tbody id="userBody"></tbody></table>
-        </div>
-      </div>
-      <div class="row" style="margin-bottom:24px">
-        <button class="btn g" onclick="saveSettings()">💾 บันทึกการตั้งค่า</button>
-        <button class="btn o" onclick="resetSetup()">เปลี่ยนการเชื่อมต่อ Supabase</button>
-      </div>
-    </section>
   </main>
 </div>
 
@@ -399,7 +351,7 @@ tr:hover td{background:#FAFCFF}
    ===================================================================== */
 const LS = {url:'masaru_pos_url', key:'masaru_pos_key', user:'masaru_pos_user', cur:'masaru_pos_cur'};
 
-/* ---- ค่าเชื่อมต่อเริ่มต้น (โปรเจกต์ MASARU POS) — แก้ได้ที่แท็บตั้งค่า ---- */
+/* ---- ค่าเชื่อมต่อเริ่มต้น (โปรเจกต์ MASARU POS) — เปลี่ยนได้ที่ปุ่มชื่อผู้ใช้ มุมขวาบน ---- */
 const DEFAULT_URL = 'https://xfmyslgtvdtyaixnmsqf.supabase.co';
 const DEFAULT_KEY = 'sb_publishable_wr9h2ZmmlqpnsbJCBWqN7g_Oq-chzDA';
 
@@ -620,20 +572,18 @@ async function startApp(){
   setCurrency(CUR, true);
   if(localStorage.getItem('masaru_pos_compact')) $('prodGrid').classList.add('compact');
   await Promise.all([loadProducts(), loadSession()]);
-  fillSettingsForm();
   quickRange(0);
   focusScan();
 }
 
 /* ---------------- tabs ---------------- */
 function tab(name){
-  ['pos','stock','report','setting'].forEach(t=>{
+  ['pos','stock','report'].forEach(t=>{
     $('pg-'+t).classList.toggle('hide', t!==name);
     document.querySelector(`nav button[data-tab="${t}"]`).classList.toggle('on', t===name);
   });
   if(name==='stock') renderStock();
   if(name==='report') loadReport();
-  if(name==='setting') loadUsersInvites();
   if(name==='pos') focusScan();
 }
 function focusScan(){ const el = $('scanInput'); if(el && !$('pg-pos').classList.contains('hide')) setTimeout(()=>el.focus(), 60); }
@@ -781,7 +731,7 @@ function renderPromoRow(){
   const promos = SETTINGS.promos || [];
   $('promoRow').innerHTML = promos.length
     ? promos.map((p,i)=>`<button class="${PROMO&&PROMO.name===p.name?'on':''}" onclick="togglePromo(${i})">${esc(p.name)}</button>`).join('')
-    : `<span style="font-size:12px;color:var(--muted)">ยังไม่มีโปรโมชั่น — เพิ่มได้ที่แท็บตั้งค่า</span>`;
+    : `<span style="font-size:12px;color:var(--muted)">ยังไม่มีโปรโมชั่น — เพิ่มได้ที่ปุ่มชื่อผู้ใช้ มุมขวาบน</span>`;
 }
 function togglePromo(i){
   const p = (SETTINGS.promos||[])[i];
@@ -1006,7 +956,7 @@ function openProd(id){
       <div class="fld"><label>หมวดหมู่</label><input id="pdCat" value="${esc(p.category||'ทั่วไป')}"></div>
     </div>
     <div class="g2" style="margin-top:10px">
-      <div class="fld"><label>ราคา บาท (฿)</label><input type="number" step="0.01" id="pdThb" value="${p.price_thb||0}" oninput="autoLak()"></div>
+      <div class="fld"><label>ราคา บาท (฿)</label><input type="number" step="0.01" id="pdThb" value="${p.price_thb||0}"></div>
       <div class="fld"><label>ราคา กีบ (₭)</label><input type="number" step="1" id="pdLak" value="${p.price_lak||0}"></div>
     </div>
     <div class="g3" style="margin-top:10px">
@@ -1017,15 +967,6 @@ function openProd(id){
     [{t:'ยกเลิก',c:'o',f:closeModal}, ...(id?[{t:'ลบ',c:'r',f:()=>delProd(id)}]:[]), {t:'บันทึก',c:'g',f:()=>saveProd(id)}], 'wide');
   PROD_IMG = p.image_url || null;
   setTimeout(()=>$('pdBar').focus(),100);
-}
-function autoLak(){
-  const rate = Number((SETTINGS.currency||{}).rate_thb_to_lak) || 0;
-  if(!rate) return;
-  const lak = $('pdLak');
-  if(lak && (!Number(lak.value) || lak.dataset.auto==='1')){
-    lak.value = Math.round((Number($('pdThb').value)||0) * rate);
-    lak.dataset.auto = '1';
-  }
 }
 async function saveProd(id){
   const body = {
@@ -1364,17 +1305,54 @@ function exportReport(){
   toast('ส่งออกแล้ว','ok');
 }
 
-/* ---------------- settings ---------------- */
-function fillSettingsForm(){
-  const b = SETTINGS.booth||{}, c = SETTINGS.currency||{};
-  $('stBoothName').value = b.name||''; $('stBoothLoc').value = b.location||'';
-  $('stFooter').value = b.footer||'';
-  $('stCurPrimary').value = c.primary||'LAK'; $('stRate').value = c.rate_thb_to_lak||700;
+/* ---------------- จัดการระบบ (เปิดจากปุ่มชื่อผู้ใช้มุมขวาบน) ---------------- */
+function openAdmin(){
+  const b = SETTINGS.booth || {};
+  modal('จัดการระบบ', `
+    <div style="background:#F4F7FB;padding:10px 12px;border-radius:9px;margin-bottom:14px;font-size:13.5px">
+      เข้าใช้งานเป็น <b>${esc(USER)}</b>${ME&&ME.email?` · ${esc(ME.email)}`:''}
+    </div>
+
+    <h4 style="margin:0 0 8px;font-size:14px;color:var(--navy)">🏪 ข้อมูลบูธ (ใช้บนหัวบิล)</h4>
+    <div class="g2">
+      <div class="fld"><label>ชื่อบูธ</label><input id="stBoothName" value="${esc(b.name||'')}"></div>
+      <div class="fld"><label>สถานที่</label><input id="stBoothLoc" value="${esc(b.location||'')}"></div>
+    </div>
+    <div class="fld" style="margin-top:10px"><label>ข้อความท้ายบิล</label><input id="stFooter" value="${esc(b.footer||'')}"></div>
+
+    <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🎁 โปรโมชั่น / ส่วนลดด่วน
+      <button class="btn sm" style="float:right" onclick="addPromo()">+ เพิ่ม</button></h4>
+    <div class="tbl-wrap" style="max-height:170px">
+      <table><thead><tr><th>ชื่อโปร</th><th>ประเภท</th><th class="num">ค่า</th><th class="num">ขั้นต่ำ</th><th></th></tr></thead>
+      <tbody id="promoBody"></tbody></table>
+    </div>
+
+    <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🎟️ รหัสเชิญ
+      <button class="btn sm" style="float:right" onclick="addInvite()">+ สร้าง</button></h4>
+    <div class="tbl-wrap" style="max-height:170px">
+      <table><thead><tr><th>รหัส</th><th>ป้าย</th><th class="num">ใช้แล้ว</th><th>สถานะ</th><th></th></tr></thead>
+      <tbody id="inviteBody"><tr><td colspan="5" style="color:var(--muted);padding:14px">กำลังโหลด...</td></tr></tbody></table>
+    </div>
+
+    <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">👥 ผู้ใช้งาน</h4>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 8px">ทุกคนที่ล็อกอินได้เข้าถึงทุกเมนูเท่ากัน — ลูกค้าเข้าไม่ได้เพราะไม่มีบัญชี</p>
+    <div class="tbl-wrap" style="max-height:170px">
+      <table><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>สมัครเมื่อ</th></tr></thead>
+      <tbody id="userBody"></tbody></table>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn o sm" onclick="resetSetup()">เปลี่ยนการเชื่อมต่อ Supabase</button>
+      <button class="btn r sm" onclick="signOut()">ออกจากระบบ</button>
+    </div>`,
+    [{t:'ปิด',c:'o',f:closeModal},{t:'💾 บันทึก',c:'g',f:saveSettings}], 'wide');
   renderPromos();
+  loadUsersInvites();
 }
 
 /* ---------------- ผู้ใช้งาน & รหัสเชิญ ---------------- */
 async function loadUsersInvites(){
+  if(!$('userBody') || !$('inviteBody')) return;
   try{
     const [users, invites] = await Promise.all([
       sbAll('pos_users?select=*&order=created_at.asc'),
@@ -1391,21 +1369,21 @@ async function loadUsersInvites(){
                : expired ? '<span class="badge void">หมดอายุ</span>'
                : full ? '<span class="badge low">ใช้ครบแล้ว</span>' : '<span class="badge ok">ใช้ได้</span>';
       return `<tr>
-        <td><b style="font-family:monospace">${esc(v.code)}</b></td>
+        <td><b style="font-family:monospace">${esc(v.code)}</b>${v.expires_at?`<br><small style="color:var(--muted)">ถึง ${fmtDT(v.expires_at)}</small>`:''}</td>
         <td>${esc(v.label||'')}</td>
-        <td class="num">${v.used_count} / ${v.max_uses>0?v.max_uses:'ไม่จำกัด'}</td>
-        <td>${v.expires_at?fmtDT(v.expires_at):'—'}</td>
+        <td class="num">${v.used_count} / ${v.max_uses>0?v.max_uses:'∞'}</td>
         <td>${st}</td>
         <td><button class="btn o sm" onclick="copyInvite('${esc(v.code)}')">คัดลอก</button>
             <button class="btn o sm" onclick="toggleInvite(${v.id},${v.active?'false':'true'})">${v.active?'ปิด':'เปิด'}</button></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรหัสเชิญ</td></tr>`;
+    }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรหัสเชิญ</td></tr>`;
   }catch(e){ toast('โหลดผู้ใช้งานไม่สำเร็จ: '+e.message,'err'); }
 }
 function copyInvite(code){
   navigator.clipboard.writeText(code).then(()=>toast('คัดลอกรหัส '+code,'ok'), ()=>prompt('คัดลอกรหัสนี้:', code));
 }
 function addInvite(){
+  stashBooth();
   const suggest = 'MASARU-' + Math.random().toString(36).slice(2,7).toUpperCase();
   modal('สร้างรหัสเชิญ', `
     <div class="fld"><label>รหัสเชิญ</label><input id="ivCode" value="${suggest}"></div>
@@ -1425,7 +1403,7 @@ async function saveInvite(){
       max_uses: Number($('ivMax').value)||0,
       expires_at: $('ivExp').value ? new Date($('ivExp').value + 'T23:59:59').toISOString() : null,
       created_by: ME ? ME.display_name : null, active: true })});
-    closeModal(); loadUsersInvites(); toast('สร้างรหัสเชิญแล้ว','ok');
+    openAdmin(); toast('สร้างรหัสเชิญแล้ว','ok');
   }catch(e){ toast(/duplicate/i.test(e.message)?'รหัสนี้มีอยู่แล้ว':e.message,'err'); }
 }
 async function toggleInvite(id, on){
@@ -1434,6 +1412,7 @@ async function toggleInvite(id, on){
   catch(e){ toast(e.message,'err'); }
 }
 function renderPromos(){
+  if(!$('promoBody')) return;
   const list = SETTINGS.promos||[];
   $('promoBody').innerHTML = list.map((p,i)=>`<tr>
     <td>${esc(p.name)}</td><td>${p.type==='percent'?'เปอร์เซ็นต์':'จำนวนเงิน'}</td>
@@ -1442,7 +1421,12 @@ function renderPromos(){
     <td><button class="btn o sm" onclick="rmPromo(${i})">ลบ</button></td></tr>`).join('')
     || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีโปรโมชั่น</td></tr>`;
 }
+function stashBooth(){   // เก็บค่าที่พิมพ์ค้างไว้ ก่อนเปิด modal ซ้อน
+  if(!$('stBoothName')) return;
+  SETTINGS.booth = {name:$('stBoothName').value.trim(), location:$('stBoothLoc').value.trim(), footer:$('stFooter').value.trim()};
+}
 function addPromo(){
+  stashBooth();
   modal('เพิ่มโปรโมชั่น', `
     <div class="fld"><label>ชื่อโปร (แสดงบนปุ่มในหน้าขาย)</label><input id="prName" placeholder="เช่น ลด 10%"></div>
     <div class="g2" style="margin-top:10px">
@@ -1453,14 +1437,13 @@ function addPromo(){
     [{t:'ยกเลิก',c:'o',f:closeModal},{t:'เพิ่ม',c:'g',f:()=>{
       const n = $('prName').value.trim(); if(!n){ toast('ใส่ชื่อโปร','err'); return; }
       SETTINGS.promos = [...(SETTINGS.promos||[]), {name:n, type:$('prType').value, value:Number($('prVal').value)||0, min_total:Number($('prMin').value)||0}];
-      closeModal(); renderPromos(); renderPromoRow();
+      openAdmin(); renderPromoRow();
     }}]);
 }
 function rmPromo(i){ SETTINGS.promos.splice(i,1); renderPromos(); renderPromoRow(); }
 async function saveSettings(){
   const payload = [
     {key:'booth',    value:{name:$('stBoothName').value.trim(), location:$('stBoothLoc').value.trim(), footer:$('stFooter').value.trim()}},
-    {key:'currency', value:{primary:$('stCurPrimary').value, rate_thb_to_lak:Number($('stRate').value)||700}},
     {key:'promos',   value:SETTINGS.promos||[]}
   ];
   try{
