@@ -31,6 +31,7 @@ header .spacer{flex:1}
 .hbtn{color:#fff;background:rgba(255,255,255,.10);padding:7px 13px;border-radius:999px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
 .hbtn:hover{background:rgba(255,255,255,.2)}
 .hbtn.act{background:var(--gold);color:#22303F;font-weight:600}
+.hbtn.off{background:rgba(224,138,0,.85);color:#fff;font-weight:600}
 .cur-toggle{display:flex;background:rgba(255,255,255,.10);border-radius:999px;padding:3px}
 .cur-toggle button{padding:5px 14px;border-radius:999px;color:#C6D2E3;font-size:13px;font-weight:600}
 .cur-toggle button.on{background:var(--gold);color:#22303F}
@@ -228,7 +229,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v9</b> — หัวบิล 4 บรรทัด · เปิดรอบเลือกวันที่ · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v10</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -249,7 +250,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v9</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v10</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -257,6 +258,7 @@ tr:hover td{background:#FAFCFF}
       <button id="curLAK" class="on" onclick="setCurrency('LAK')">₭ กีบ</button>
       <button id="curTHB" onclick="setCurrency('THB')">฿ บาท</button>
     </div>
+    <button class="hbtn" id="netBtn" onclick="openNetModal()" title="สถานะการเชื่อมต่อ">🟢 ออนไลน์</button>
     <button class="hbtn" id="sessBtn" onclick="openSessionModal()"><span class="dot" id="sessDot"></span><span id="sessTxt">ยังไม่เปิดรอบ</span></button>
     <button class="hbtn" onclick="openAdmin()" title="จัดการระบบ">👤 <span id="hUser"></span></button>
   </header>
@@ -470,6 +472,99 @@ async function sbAll(path){          // อ่านทีละ 1000 แถว�
 }
 const rpc = (fn, body) => sb('rpc/' + fn, {method:'POST', body: JSON.stringify(body)});
 
+/* ================= โหมดออฟไลน์ =================
+   - แคชสินค้า/ตั้งค่า/รอบขาย ไว้ในเครื่อง → เน็ตหลุดก็เปิดใช้งานต่อได้
+   - ขายตอนออฟไลน์ → เก็บบิลเข้าคิว + ตัดสต๊อกในเครื่องไว้ก่อน
+   - เน็ตกลับมา → ส่งบิลในคิวขึ้น Supabase อัตโนมัติ
+   ================================================ */
+const CK = {prod:'masaru_pos_c_products', set:'masaru_pos_c_settings',
+            sess:'masaru_pos_c_session',  q:'masaru_pos_queue'};
+let OFFLINE = !navigator.onLine, SYNCING = false;
+const lsGet = (k,d) => { try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } };
+const lsSet = (k,v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+const getQ   = () => lsGet(CK.q, []);
+const setQ   = q  => lsSet(CK.q, q);
+const isNetErr = e => !navigator.onLine ||
+  /Failed to fetch|NetworkError|Load failed|ERR_|timeout|network/i.test(String((e && e.message) || e));
+
+function renderNet(){
+  const el = $('netBtn'); if(!el) return;
+  const n = getQ().length;
+  el.innerHTML = (OFFLINE ? '📴 ออฟไลน์' : '🟢 ออนไลน์') + (n ? ` · ค้าง ${n}` : '');
+  el.classList.toggle('act', n > 0);
+  el.classList.toggle('off', OFFLINE);
+}
+function setOffline(v){ OFFLINE = v; renderNet(); }
+window.addEventListener('online',  ()=>{ setOffline(false); toast('เน็ตกลับมาแล้ว — กำลังซิงก์','ok'); syncQueue(true); });
+window.addEventListener('offline', ()=>{ setOffline(true);  toast('เน็ตหลุด — เข้าโหมดออฟไลน์ ขายต่อได้ปกติ'); });
+setInterval(()=>{ if(navigator.onLine && getQ().length && !SYNCING) syncQueue(true); }, 60000);
+
+function localBillNo(){
+  const day = todayStr().replace(/-/g,'').slice(2);
+  const n = getQ().filter(x => x.day === day).length + 1;
+  return 'OFF' + day + '-' + String(n).padStart(3,'0');
+}
+function queueSale(payload, c){
+  const day = todayStr().replace(/-/g,'').slice(2);
+  const billNo = localBillNo();
+  const q = getQ();
+  q.push({day, billNo, at:new Date().toISOString(), total:c.total, cur:CUR, payload});
+  setQ(q);
+  // ตัดสต๊อกในเครื่องไว้ก่อน เพื่อไม่ให้ขายเกิน
+  payload.items.forEach(it=>{
+    const p = PRODUCTS.find(x=>x.id===it.product_id);
+    if(p) p.stock = Math.max(0, p.stock - it.qty);
+  });
+  lsSet(CK.prod, PRODUCTS);
+  renderNet(); renderGrid(); renderStock();
+  return billNo;
+}
+async function syncQueue(silent){
+  if(SYNCING) return;
+  const q = getQ();
+  if(!q.length){ if(!silent) toast('ไม่มีบิลค้างส่ง','ok'); return; }
+  if(!navigator.onLine){ if(!silent) toast('ยังไม่มีเน็ต','err'); return; }
+  SYNCING = true;
+  let ok = 0, bad = 0; const rest = [];
+  for(const item of q){
+    try{ await rpc('pos_checkout', {p: item.payload}); ok++; }
+    catch(e){
+      if(isNetErr(e)){ rest.push(item); }                 // เน็ตหลุดกลางทาง เก็บไว้ลองใหม่
+      else { item.error = e.message; rest.push(item); bad++; }
+    }
+  }
+  setQ(rest); SYNCING = false;
+  setOffline(!navigator.onLine);
+  if(ok){ try{ await loadProducts(); await loadSession(); }catch(e){} }
+  renderNet();
+  if(ok || bad || !silent)
+    toast(`ซิงก์ ${ok} บิล${bad?` · ติดปัญหา ${bad} บิล`:''}`, bad ? 'err' : 'ok');
+}
+function openNetModal(){
+  const q = getQ();
+  modal('สถานะการเชื่อมต่อ', `
+    <div style="background:${OFFLINE?'#FFF3DC':'#E8F6EE'};padding:12px 14px;border-radius:10px;margin-bottom:12px">
+      <b style="font-size:15px">${OFFLINE ? '📴 ออฟไลน์' : '🟢 ออนไลน์'}</b><br>
+      <span style="font-size:13px;color:var(--muted)">${OFFLINE
+        ? 'ขายต่อได้ปกติ — บิลจะถูกเก็บไว้ในเครื่อง แล้วส่งขึ้นระบบอัตโนมัติเมื่อเน็ตกลับมา'
+        : 'เชื่อมต่อ Supabase ได้ปกติ'}</span>
+    </div>
+    <div style="font-size:13.5px;margin-bottom:6px">บิลค้างส่ง <b>${q.length}</b> บิล</div>
+    <div class="tbl-wrap" style="max-height:240px">
+      <table><thead><tr><th>เลขที่</th><th>เวลา</th><th class="num">ยอด</th><th>สถานะ</th></tr></thead><tbody>
+      ${q.length ? q.map(x=>`<tr><td><b>${esc(x.billNo)}</b></td><td>${fmtDT(x.at)}</td>
+        <td class="num">${money(x.total, x.cur)}</td>
+        <td>${x.error ? `<span class="badge void" title="${esc(x.error)}">ติดปัญหา</span>` : '<span class="badge low">รอส่ง</span>'}</td></tr>`).join('')
+        : `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">ส่งครบแล้ว ไม่มีบิลค้าง</td></tr>`}
+      </tbody></table>
+    </div>
+    ${q.some(x=>x.error) ? `<p style="font-size:12.5px;color:var(--danger);margin-top:10px">บิลที่ติดปัญหามักเกิดจากสต๊อกบนเซิร์ฟเวอร์ไม่พอ (เครื่องอื่นขายตัดไปก่อน) — ตรวจแล้วลบทิ้งได้</p>` : ''}`,
+    [{t:'ปิด',c:'o',f:closeModal},
+     ...(q.some(x=>x.error) ? [{t:'ลบบิลที่ติดปัญหา',c:'r',f:()=>{
+        setQ(getQ().filter(x=>!x.error)); renderNet(); openNetModal(); }}] : []),
+     {t:'🔄 ซิงก์เดี๋ยวนี้',c:'g',f:()=>{ syncQueue(false).then(()=>openNetModal()); }}]);
+}
+
 /* ---------------- utils ---------------- */
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -599,15 +694,25 @@ async function loadMe(){
   localStorage.setItem(LS.user, USER);
 }
 async function enterApp(){
-  const rows = await sb('pos_settings?select=key,value');   // ถ้า token หมดอายุ/ไม่มีสิทธิ์ จะ throw ออกไป
-  SETTINGS = {}; rows.forEach(r => SETTINGS[r.key] = r.value);
-  await loadMe();
+  try{
+    const rows = await sb('pos_settings?select=key,value');   // ถ้า token หมดอายุ/ไม่มีสิทธิ์ จะ throw ออกไป
+    SETTINGS = {}; rows.forEach(r => SETTINGS[r.key] = r.value);
+    lsSet(CK.set, SETTINGS);
+    await loadMe();
+    setOffline(false);
+  }catch(e){
+    const cached = lsGet(CK.set, null);
+    if(isNetErr(e) && cached && ME){   // เคยล็อกอินไว้แล้ว + มีแคช = เข้าโหมดออฟไลน์ได้
+      SETTINGS = cached; USER = ME.display_name || ME.email || 'ผู้ใช้งาน'; setOffline(true);
+    }else throw e;
+  }
   $('authScreen').classList.add('hide');
   $('app').classList.remove('hide');
   await startApp();
 }
 async function signOut(){
   if(CART.length && !confirm('มีสินค้าค้างในตะกร้า ออกจากระบบเลยไหม?')) return;
+  if(getQ().length && !confirm(`ยังมีบิลค้างส่ง ${getQ().length} บิล\nถ้าออกจากระบบตอนนี้ บิลจะยังอยู่ในเครื่องนี้ ต้องกลับมาเข้าด้วยเครื่องเดิมเพื่อส่ง\n\nออกเลยไหม?`)) return;
   try{ await fetch(SB_URL.replace(/\/$/,'')+'/auth/v1/logout', {method:'POST',
         headers:{apikey:SB_KEY, Authorization:'Bearer '+TOKEN}}); }catch(e){}
   CART = []; clearSession(); location.reload();
@@ -621,6 +726,8 @@ async function startApp(){
   setCurrency(CUR, true);
   if(localStorage.getItem('masaru_pos_compact')) $('prodGrid').classList.add('compact');
   await Promise.all([loadProducts(), loadSession()]);
+  renderNet();
+  if(navigator.onLine && getQ().length) syncQueue(true);
   quickRange(0);
   focusScan();
 }
@@ -661,7 +768,15 @@ function setCurrency(c, silent){
 
 /* ---------------- products ---------------- */
 async function loadProducts(){
-  PRODUCTS = await sbAll('pos_products?select=*&order=sku.asc');
+  try{
+    PRODUCTS = await sbAll('pos_products?select=*&order=sku.asc');
+    lsSet(CK.prod, PRODUCTS);
+    setOffline(false);
+  }catch(e){
+    const c = lsGet(CK.prod, null);
+    if(isNetErr(e) && c && c.length){ PRODUCTS = c; setOffline(true); toast('ออฟไลน์ — ใช้ข้อมูลสินค้าที่บันทึกไว้ในเครื่อง'); }
+    else throw e;
+  }
   renderCats(); renderGrid(); renderStock();
 }
 function renderCats(){
@@ -854,8 +969,14 @@ function togglePromo(i){
 
 /* ---------------- session (รอบขาย) ---------------- */
 async function loadSession(){
-  const rows = await sb('pos_sessions?status=eq.open&select=*&order=opened_at.desc&limit=1');
-  SESSION = rows[0] || null;
+  try{
+    const rows = await sb('pos_sessions?status=eq.open&select=*&order=opened_at.desc&limit=1');
+    SESSION = rows[0] || null;
+    lsSet(CK.sess, SESSION);
+  }catch(e){
+    if(isNetErr(e)){ SESSION = lsGet(CK.sess, null); setOffline(true); }
+    else throw e;
+  }
   $('sessDot').className = 'dot' + (SESSION?' live':'');
   if(SESSION){
     const d = new Date(SESSION.opened_at);
@@ -919,7 +1040,7 @@ async function closeSession(){
 let PAY = {paid:0, method:'cash'};
 function openPay(){
   if(!CART.length) return;
-  if(!SESSION){ toast('กรุณาเปิดรอบขายก่อน','err'); openSessionModal(); return; }
+  if(!SESSION && !OFFLINE){ toast('กรุณาเปิดรอบขายก่อน','err'); openSessionModal(); return; }
   const c = calc();
   PAY = {paid:0, method:'cash'};
   const quick = CUR==='LAK' ? [50000,100000,200000,500000,1000000] : [100,500,1000,2000,5000];
@@ -984,12 +1105,20 @@ async function doCheckout(){
         line_total:(i.unit_price-(i.line_discount||0))*i.qty
       }))
     };
-    const r = await rpc('pos_checkout', {p: payload});
-    const billNo = r.bill_no || (r[0] && r[0].bill_no);
-    const snapshot = {billNo, cur:CUR, items:[...CART], c, pay:{...PAY}};
+    let billNo, offline = false;
+    try{
+      const r = await rpc('pos_checkout', {p: payload});
+      billNo = r.bill_no || (r[0] && r[0].bill_no);
+      setOffline(false);
+    }catch(err){
+      if(!isNetErr(err)) throw err;              // error จากเซิร์ฟเวอร์ (เช่นสต๊อกไม่พอ) = ไม่เข้าคิว
+      billNo = queueSale(payload, c);            // เน็ตหลุด = เก็บเข้าคิว ขายต่อได้เลย
+      offline = true; setOffline(true);
+    }
+    const snapshot = {billNo, cur:CUR, items:[...CART], c, pay:{...PAY}, offline};
     CART = []; PROMO = null; BILLDISC = {type:'percent', value:0};
     closeModal(); renderCart();
-    await loadProducts();
+    if(!offline){ try{ await loadProducts(); }catch(e){} }
     showSuccess(snapshot);
   }catch(e){
     toast('บันทึกไม่สำเร็จ: ' + e.message, 'err');
@@ -1000,10 +1129,12 @@ function showSuccess(s){
   modal('ขายสำเร็จ', `
     <div style="text-align:center;padding:6px 0 4px">
       <div style="font-size:46px">✅</div>
-      <div style="font-size:15px;color:var(--muted);margin-top:4px">เลขบิล</div>
+      <div style="font-size:15px;color:var(--muted);margin-top:4px">${s.offline?'เลขบิลชั่วคราว (ออฟไลน์)':'เลขบิล'}</div>
       <div style="font-size:22px;font-weight:700;color:var(--navy)">${esc(s.billNo||'-')}</div>
       <div style="font-size:26px;font-weight:700;color:var(--ok);margin-top:8px">${money(s.c.total, s.cur)}</div>
       ${s.pay.method==='cash' ? `<div style="font-size:15px;margin-top:6px">เงินทอน <b>${money(Math.max(s.pay.paid-s.c.total,0), s.cur)}</b></div>`:''}
+      ${s.offline ? `<div style="margin-top:12px;background:#FFF3DC;border-radius:9px;padding:9px 12px;font-size:13px;color:#8A6D1F">
+        📴 บันทึกในเครื่องแล้ว — จะส่งขึ้นระบบอัตโนมัติเมื่อเน็ตกลับมา (ค้างอยู่ ${getQ().length} บิล)</div>`:''}
     </div>`,
     [{t:'🖨 พิมพ์บิล',c:'o',f:()=>printBill(s)},{t:'ขายต่อ',c:'g',f:()=>{closeModal();focusScan();}}]);
   setTimeout(()=>{ const b=document.querySelector('.mfoot .btn.g'); if(b) b.focus(); }, 100);
@@ -1729,7 +1860,7 @@ document.addEventListener('click', e=>{
   if(t.closest('input,textarea,select,button,.pos-right')) return;
   focusScan();
 });
-window.addEventListener('beforeunload', e=>{ if(CART.length){ e.preventDefault(); e.returnValue=''; } });
+window.addEventListener('beforeunload', e=>{ if(CART.length || getQ().length){ e.preventDefault(); e.returnValue=''; } });
 </script>
 </body>
 </html>
