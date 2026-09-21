@@ -376,8 +376,13 @@ tr:hover td{background:#FAFCFF}
    Backend: Supabase REST (fetch ตรง ไม่พึ่ง CDN library)
    ===================================================================== */
 const LS = {url:'masaru_pos_url', key:'masaru_pos_key', user:'masaru_pos_user', cur:'masaru_pos_cur'};
-let SB_URL = localStorage.getItem(LS.url) || '';
-let SB_KEY = localStorage.getItem(LS.key) || '';
+
+/* ---- ค่าเชื่อมต่อเริ่มต้น (โปรเจกต์ MASARU POS) — แก้ได้ที่แท็บตั้งค่า ---- */
+const DEFAULT_URL = 'https://xfmyslgtvdtyaixnmsqf.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_wr9h2ZmmlqpnsbJCBWqN7g_Oq-chzDA';
+
+let SB_URL = localStorage.getItem(LS.url) || DEFAULT_URL;
+let SB_KEY = localStorage.getItem(LS.key) || DEFAULT_KEY;
 let USER    = localStorage.getItem(LS.user) || '';
 let CUR     = localStorage.getItem(LS.cur) || 'LAK';
 
@@ -443,7 +448,10 @@ const fmtDT = s => s ? new Date(s).toLocaleString('th-TH',{day:'2-digit',month:'
 
 /* ---------------- boot ---------------- */
 (function boot(){
-  if(!SB_URL || !SB_KEY){ $('setupScreen').classList.remove('hide'); return; }
+  if(localStorage.getItem('masaru_pos_forcesetup') || !SB_URL || !SB_KEY){
+    $('setUrl').value = SB_URL; $('setKey').value = SB_KEY;
+    $('setupScreen').classList.remove('hide'); return;
+  }
   $('lockScreen').classList.remove('hide');
   if(USER) $('lkName').value = USER;
   setTimeout(()=>$('lkPin').focus(), 200);
@@ -453,12 +461,14 @@ function saveSetup(){
   const u = $('setUrl').value.trim(), k = $('setKey').value.trim();
   if(!u || !k){ $('setupMsg').textContent = 'กรอกให้ครบทั้ง 2 ช่อง'; return; }
   localStorage.setItem(LS.url, u); localStorage.setItem(LS.key, k);
+  localStorage.removeItem('masaru_pos_forcesetup');
   SB_URL = u; SB_KEY = k;
   $('setupScreen').classList.add('hide'); $('lockScreen').classList.remove('hide');
 }
 function resetSetup(){
-  if(!confirm('ล้างการเชื่อมต่อ Supabase ของเครื่องนี้?')) return;
+  if(!confirm('เปลี่ยนการเชื่อมต่อ Supabase ของเครื่องนี้?')) return;
   localStorage.removeItem(LS.url); localStorage.removeItem(LS.key);
+  localStorage.setItem('masaru_pos_forcesetup', '1');
   location.reload();
 }
 async function doUnlock(){
