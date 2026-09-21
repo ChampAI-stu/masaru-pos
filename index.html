@@ -163,6 +163,9 @@ tr:hover td{background:#FAFCFF}
 .center-box p{margin:0 0 18px;color:var(--muted);font-size:13.5px}
 .center-box .fld{margin-bottom:11px}
 .center-box .fld input{width:100%}
+.authtabs{display:flex;background:#EEF2F8;border-radius:10px;padding:4px;margin-bottom:14px;gap:4px}
+.authtabs button{flex:1;padding:9px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--muted)}
+.authtabs button.on{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(26,41,66,.12)}
 
 @media(max-width:900px){
   .pos-right{position:fixed;inset:auto 0 0 0;width:100%;height:64vh;border-left:none;border-top:2px solid var(--navy);border-radius:16px 16px 0 0;z-index:60;transform:translateY(calc(100% - 58px));transition:.25s}
@@ -198,15 +201,23 @@ tr:hover td{background:#FAFCFF}
   </div>
 </div>
 
-<!-- ============ LOCK (PIN) ============ -->
-<div class="center-wrap hide" id="lockScreen">
+<!-- ============ LOGIN / REGISTER ============ -->
+<div class="center-wrap hide" id="authScreen">
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
-    <p>ใส่ชื่อผู้ขายและ PIN เพื่อเริ่มใช้งาน</p>
-    <div class="fld"><label>ชื่อผู้ขาย</label><input id="lkName" placeholder="เช่น แชมป์"></div>
-    <div class="fld"><label>PIN</label><input id="lkPin" type="password" inputmode="numeric" placeholder="••••" onkeydown="if(event.key==='Enter')doUnlock()"></div>
-    <button class="btn" style="width:100%;margin-top:6px" onclick="doUnlock()">เข้าใช้งาน</button>
-    <div id="lockMsg" style="margin-top:10px;font-size:13px;color:var(--danger)"></div>
+    <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
+    <div class="authtabs">
+      <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
+      <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
+    </div>
+    <div id="regFields" class="hide">
+      <div class="fld"><label>รหัสเชิญ</label><input id="auInvite" placeholder="รหัสที่ได้รับจากทีม" autocomplete="off"></div>
+      <div class="fld"><label>ชื่อผู้ใช้งาน (แสดงบนบิล)</label><input id="auName" autocomplete="name"></div>
+    </div>
+    <div class="fld"><label>อีเมล</label><input id="auEmail" type="email" autocomplete="username"></div>
+    <div class="fld"><label>รหัสผ่าน</label><input id="auPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()"></div>
+    <button class="btn" style="width:100%;margin-top:6px" id="auBtn" onclick="doAuth()">เข้าสู่ระบบ</button>
+    <div id="authMsg" style="margin-top:10px;font-size:13px;color:var(--danger)"></div>
     <button class="btn o sm" style="width:100%;margin-top:14px" onclick="resetSetup()">เปลี่ยนการเชื่อมต่อ Supabase</button>
   </div>
 </div>
@@ -224,7 +235,7 @@ tr:hover td{background:#FAFCFF}
       <button id="curTHB" onclick="setCurrency('THB')">฿ บาท</button>
     </div>
     <button class="hbtn" id="sessBtn" onclick="openSessionModal()"><span class="dot" id="sessDot"></span><span id="sessTxt">ยังไม่เปิดรอบ</span></button>
-    <button class="hbtn" onclick="lockNow()">🔒 <span id="hUser"></span></button>
+    <button class="hbtn" onclick="signOut()" title="ออกจากระบบ">👤 <span id="hUser"></span></button>
   </header>
 
   <nav>
@@ -353,9 +364,20 @@ tr:hover td{background:#FAFCFF}
         </div>
       </div>
       <div class="card">
-        <h3>🔐 PIN เข้าใช้งาน</h3>
-        <div class="row">
-          <div class="fld"><label>PIN ใหม่ (4-6 หลัก)</label><input id="stPin" inputmode="numeric" maxlength="6"></div>
+        <h3>🎟️ รหัสเชิญ (ใช้สมัครผู้ใช้ใหม่) <span class="sp"></span>
+          <button class="btn sm" onclick="addInvite()">+ สร้างรหัสเชิญ</button>
+          <button class="btn o sm" onclick="loadUsersInvites()">🔄</button></h3>
+        <div class="tbl-wrap" style="max-height:260px">
+          <table><thead><tr><th>รหัส</th><th>ป้ายกำกับ</th><th class="num">ใช้แล้ว / สูงสุด</th><th>หมดอายุ</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="inviteBody"></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>👥 ผู้ใช้งานในระบบ</h3>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">ทุกคนที่ล็อกอินได้เข้าถึงทุกเมนูเท่ากัน (ไม่มีการแบ่งสิทธิ์) — ลูกค้าเข้าไม่ได้เพราะไม่มีบัญชี</p>
+        <div class="tbl-wrap" style="max-height:260px">
+          <table><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>สมัครเมื่อ</th></tr></thead>
+          <tbody id="userBody"></tbody></table>
         </div>
       </div>
       <div class="row" style="margin-bottom:24px">
@@ -390,17 +412,49 @@ let PRODUCTS = [], CART = [], SETTINGS = {}, SESSION = null, PROMO = null;
 let REPORT = {sales:[], items:[]};
 let CAT = 'all';
 
+/* ---------------- Supabase Auth ---------------- */
+const AK = {tok:'masaru_pos_token', ref:'masaru_pos_refresh', me:'masaru_pos_me'};
+let TOKEN   = localStorage.getItem(AK.tok) || '';
+let REFRESH = localStorage.getItem(AK.ref) || '';
+let ME      = (()=>{ try{ return JSON.parse(localStorage.getItem(AK.me)||'null'); }catch(e){ return null; } })();
+
+const bearer = () => 'Bearer ' + (TOKEN || SB_KEY);
+async function authApi(path, body){
+  const res = await fetch(SB_URL.replace(/\/$/,'') + '/auth/v1/' + path, {
+    method:'POST', headers:{apikey:SB_KEY, 'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(d.error_description || d.msg || d.message || ('HTTP ' + res.status));
+  return d;
+}
+function setSession(d){
+  TOKEN = d.access_token || ''; REFRESH = d.refresh_token || '';
+  localStorage.setItem(AK.tok, TOKEN); localStorage.setItem(AK.ref, REFRESH);
+}
+async function refreshToken(){
+  if(!REFRESH) return false;
+  try{ setSession(await authApi('token?grant_type=refresh_token', {refresh_token: REFRESH})); return true; }
+  catch(e){ return false; }
+}
+function clearSession(){
+  TOKEN = ''; REFRESH = ''; ME = null;
+  [AK.tok, AK.ref, AK.me].forEach(k=>localStorage.removeItem(k));
+}
+
 /* ---------------- Supabase REST helper ---------------- */
-async function sb(path, opt={}){
+async function sb(path, opt={}, _retried){
   const res = await fetch(SB_URL.replace(/\/$/,'') + '/rest/v1/' + path, {
     ...opt,
     headers:{
-      apikey: SB_KEY, Authorization:'Bearer ' + SB_KEY,
+      apikey: SB_KEY, Authorization: bearer(),
       'Content-Type':'application/json',
       Prefer: opt.prefer || 'return=representation',
       ...(opt.headers||{})
     }
   });
+  if(res.status === 401 && !_retried && TOKEN){
+    if(await refreshToken()) return sb(path, opt, true);
+  }
   const txt = await res.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch(e){ data = txt; }
@@ -413,9 +467,14 @@ async function sb(path, opt={}){
 async function sbAll(path){          // อ่านทีละ 1000 แถวจนครบ (กัน limit ของ Supabase)
   let out=[], from=0, size=1000;
   for(;;){
-    const res = await fetch(SB_URL.replace(/\/$/,'')+'/rest/v1/'+path, {
-      headers:{apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, Range:`${from}-${from+size-1}`}
+    let res = await fetch(SB_URL.replace(/\/$/,'')+'/rest/v1/'+path, {
+      headers:{apikey:SB_KEY, Authorization:bearer(), Range:`${from}-${from+size-1}`}
     });
+    if(res.status === 401 && TOKEN && await refreshToken()){
+      res = await fetch(SB_URL.replace(/\/$/,'')+'/rest/v1/'+path, {
+        headers:{apikey:SB_KEY, Authorization:bearer(), Range:`${from}-${from+size-1}`}
+      });
+    }
     if(!res.ok) throw new Error(await res.text());
     const chunk = await res.json();
     out = out.concat(chunk);
@@ -447,15 +506,22 @@ const todayStr = () => new Date().toLocaleDateString('sv-SE');
 const fmtDT = s => s ? new Date(s).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
 /* ---------------- boot ---------------- */
-(function boot(){
+(async function boot(){
   if(localStorage.getItem('masaru_pos_forcesetup') || !SB_URL || !SB_KEY){
     $('setUrl').value = SB_URL; $('setKey').value = SB_KEY;
     $('setupScreen').classList.remove('hide'); return;
   }
-  $('lockScreen').classList.remove('hide');
-  if(USER) $('lkName').value = USER;
-  setTimeout(()=>$('lkPin').focus(), 200);
+  if(TOKEN && ME){                       // เคยล็อกอินไว้ — ลองเข้าต่อเลย
+    try{ await enterApp(); return; }catch(e){ clearSession(); }
+  }
+  showAuth();
 })();
+function showAuth(){
+  $('app').classList.add('hide');
+  $('authScreen').classList.remove('hide');
+  if(ME && ME.email) $('auEmail').value = ME.email;
+  setTimeout(()=>$( $('auEmail').value ? 'auPass' : 'auEmail').focus(), 200);
+}
 
 function saveSetup(){
   const u = $('setUrl').value.trim(), k = $('setKey').value.trim();
@@ -463,7 +529,7 @@ function saveSetup(){
   localStorage.setItem(LS.url, u); localStorage.setItem(LS.key, k);
   localStorage.removeItem('masaru_pos_forcesetup');
   SB_URL = u; SB_KEY = k;
-  $('setupScreen').classList.add('hide'); $('lockScreen').classList.remove('hide');
+  $('setupScreen').classList.add('hide'); showAuth();
 }
 function resetSetup(){
   if(!confirm('เปลี่ยนการเชื่อมต่อ Supabase ของเครื่องนี้?')) return;
@@ -471,21 +537,80 @@ function resetSetup(){
   localStorage.setItem('masaru_pos_forcesetup', '1');
   location.reload();
 }
-async function doUnlock(){
-  const name = $('lkName').value.trim(), pin = $('lkPin').value.trim();
-  if(!name){ $('lockMsg').textContent = 'กรุณาใส่ชื่อผู้ขาย'; return; }
-  $('lockMsg').textContent = 'กำลังเชื่อมต่อ...';
-  try{
-    const rows = await sb('pos_settings?select=key,value');
-    SETTINGS = {}; rows.forEach(r => SETTINGS[r.key] = r.value);
-    const real = (SETTINGS.pin && SETTINGS.pin.code) || '1234';
-    if(String(pin) !== String(real)){ $('lockMsg').textContent = 'PIN ไม่ถูกต้อง'; return; }
-    USER = name; localStorage.setItem(LS.user, name);
-    $('lockScreen').classList.add('hide'); $('app').classList.remove('hide');
-    await startApp();
-  }catch(e){ $('lockMsg').textContent = 'เชื่อมต่อไม่สำเร็จ: ' + e.message; }
+/* ---------------- login / register ---------------- */
+let AUTH_MODE = 'login';
+function authMode(m){
+  AUTH_MODE = m;
+  $('atLogin').classList.toggle('on', m==='login');
+  $('atReg').classList.toggle('on', m==='reg');
+  $('regFields').classList.toggle('hide', m!=='reg');
+  $('auBtn').textContent = m==='reg' ? 'สมัครและเข้าใช้งาน' : 'เข้าสู่ระบบ';
+  $('authSub').textContent = m==='reg' ? 'ต้องมีรหัสเชิญจากทีมจึงจะสมัครได้' : 'เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ';
+  $('auPass').setAttribute('autocomplete', m==='reg' ? 'new-password' : 'current-password');
+  $('authMsg').textContent = '';
 }
-function lockNow(){ location.reload(); }
+async function doAuth(){
+  const email = $('auEmail').value.trim().toLowerCase(), pass = $('auPass').value;
+  const msg = t => $('authMsg').textContent = t;
+  if(!email || !pass){ msg('กรอกอีเมลและรหัสผ่าน'); return; }
+  $('auBtn').disabled = true;
+  try{
+    if(AUTH_MODE === 'reg'){
+      const code = $('auInvite').value.trim(), name = $('auName').value.trim();
+      if(!code){ msg('ต้องใส่รหัสเชิญ'); return; }
+      if(!name){ msg('ใส่ชื่อผู้ใช้งาน'); return; }
+      if(pass.length < 6){ msg('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
+      msg('กำลังตรวจรหัสเชิญ...');
+      const ok = await rpc('pos_verify_invite', {p_code: code});
+      if(ok !== true){ msg('รหัสเชิญไม่ถูกต้อง หมดอายุ หรือถูกใช้ครบแล้ว'); return; }
+      msg('กำลังสมัคร...');
+      const d = await authApi('signup', {email, password: pass, data:{display_name: name}});
+      if(!d.access_token){
+        msg('สมัครแล้ว แต่ต้องยืนยันอีเมลก่อน — ให้แอดมินปิด "Confirm email" ใน Supabase → Authentication → Sign In / Providers');
+        return;
+      }
+      setSession(d);
+      await rpc('pos_claim_invite', {p_code: code, p_name: name});
+    }else{
+      msg('กำลังเข้าสู่ระบบ...');
+      setSession(await authApi('token?grant_type=password', {email, password: pass}));
+    }
+    await enterApp();
+  }catch(e){
+    const t = String(e.message||'');
+    msg(/Invalid login/i.test(t) ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+      : /already registered|User already/i.test(t) ? 'อีเมลนี้สมัครไว้แล้ว — กดแท็บ "เข้าสู่ระบบ"'
+      : t);
+    clearSession();
+  }finally{ $('auBtn').disabled = false; }
+}
+function jwtClaims(){
+  try{ return JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+  catch(e){ return {}; }
+}
+async function loadMe(){
+  const c = jwtClaims();
+  let rows = [];
+  if(c.sub) rows = await sb('pos_users?select=*&id=eq.' + c.sub);
+  ME = rows[0] || {id:c.sub, display_name:(c.user_metadata&&c.user_metadata.display_name) || (c.email||'').split('@')[0] || 'ผู้ใช้งาน', email:c.email};
+  localStorage.setItem(AK.me, JSON.stringify(ME));
+  USER = ME.display_name || ME.email || 'ผู้ใช้งาน';
+  localStorage.setItem(LS.user, USER);
+}
+async function enterApp(){
+  const rows = await sb('pos_settings?select=key,value');   // ถ้า token หมดอายุ/ไม่มีสิทธิ์ จะ throw ออกไป
+  SETTINGS = {}; rows.forEach(r => SETTINGS[r.key] = r.value);
+  await loadMe();
+  $('authScreen').classList.add('hide');
+  $('app').classList.remove('hide');
+  await startApp();
+}
+async function signOut(){
+  if(CART.length && !confirm('มีสินค้าค้างในตะกร้า ออกจากระบบเลยไหม?')) return;
+  try{ await fetch(SB_URL.replace(/\/$/,'')+'/auth/v1/logout', {method:'POST',
+        headers:{apikey:SB_KEY, Authorization:'Bearer '+TOKEN}}); }catch(e){}
+  CART = []; clearSession(); location.reload();
+}
 
 async function startApp(){
   $('hUser').textContent = USER;
@@ -508,6 +633,7 @@ function tab(name){
   });
   if(name==='stock') renderStock();
   if(name==='report') loadReport();
+  if(name==='setting') loadUsersInvites();
   if(name==='pos') focusScan();
 }
 function focusScan(){ const el = $('scanInput'); if(el && !$('pg-pos').classList.contains('hide')) setTimeout(()=>el.focus(), 60); }
@@ -1244,8 +1370,68 @@ function fillSettingsForm(){
   $('stBoothName').value = b.name||''; $('stBoothLoc').value = b.location||'';
   $('stFooter').value = b.footer||'';
   $('stCurPrimary').value = c.primary||'LAK'; $('stRate').value = c.rate_thb_to_lak||700;
-  $('stPin').value = (SETTINGS.pin||{}).code||'';
   renderPromos();
+}
+
+/* ---------------- ผู้ใช้งาน & รหัสเชิญ ---------------- */
+async function loadUsersInvites(){
+  try{
+    const [users, invites] = await Promise.all([
+      sbAll('pos_users?select=*&order=created_at.asc'),
+      sbAll('pos_invites?select=*&order=created_at.desc')
+    ]);
+    $('userBody').innerHTML = users.map(u=>`<tr>
+      <td><b>${esc(u.display_name||'')}</b>${ME && u.id===ME.id?' <span class="badge ok">คุณ</span>':''}</td>
+      <td>${esc(u.email||'')}</td><td>${fmtDT(u.created_at)}</td></tr>`).join('')
+      || `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีผู้ใช้งาน</td></tr>`;
+    $('inviteBody').innerHTML = invites.map(v=>{
+      const expired = v.expires_at && new Date(v.expires_at) < new Date();
+      const full = v.max_uses > 0 && v.used_count >= v.max_uses;
+      const st = !v.active ? '<span class="badge void">ปิด</span>'
+               : expired ? '<span class="badge void">หมดอายุ</span>'
+               : full ? '<span class="badge low">ใช้ครบแล้ว</span>' : '<span class="badge ok">ใช้ได้</span>';
+      return `<tr>
+        <td><b style="font-family:monospace">${esc(v.code)}</b></td>
+        <td>${esc(v.label||'')}</td>
+        <td class="num">${v.used_count} / ${v.max_uses>0?v.max_uses:'ไม่จำกัด'}</td>
+        <td>${v.expires_at?fmtDT(v.expires_at):'—'}</td>
+        <td>${st}</td>
+        <td><button class="btn o sm" onclick="copyInvite('${esc(v.code)}')">คัดลอก</button>
+            <button class="btn o sm" onclick="toggleInvite(${v.id},${v.active?'false':'true'})">${v.active?'ปิด':'เปิด'}</button></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรหัสเชิญ</td></tr>`;
+  }catch(e){ toast('โหลดผู้ใช้งานไม่สำเร็จ: '+e.message,'err'); }
+}
+function copyInvite(code){
+  navigator.clipboard.writeText(code).then(()=>toast('คัดลอกรหัส '+code,'ok'), ()=>prompt('คัดลอกรหัสนี้:', code));
+}
+function addInvite(){
+  const suggest = 'MASARU-' + Math.random().toString(36).slice(2,7).toUpperCase();
+  modal('สร้างรหัสเชิญ', `
+    <div class="fld"><label>รหัสเชิญ</label><input id="ivCode" value="${suggest}"></div>
+    <div class="g2" style="margin-top:10px">
+      <div class="fld"><label>ป้ายกำกับ</label><input id="ivLabel" placeholder="เช่น ทีมบูธลาว"></div>
+      <div class="fld"><label>ใช้ได้กี่คน (0 = ไม่จำกัด)</label><input type="number" id="ivMax" value="5"></div>
+    </div>
+    <div class="fld" style="margin-top:10px"><label>หมดอายุ (เว้นว่าง = ไม่หมดอายุ)</label><input type="date" id="ivExp"></div>`,
+    [{t:'ยกเลิก',c:'o',f:closeModal},{t:'สร้าง',c:'g',f:saveInvite}]);
+}
+async function saveInvite(){
+  const code = $('ivCode').value.trim().toUpperCase();
+  if(!code){ toast('ใส่รหัสเชิญ','err'); return; }
+  try{
+    await sb('pos_invites', {method:'POST', prefer:'return=minimal', body: JSON.stringify({
+      code, label: $('ivLabel').value.trim()||null,
+      max_uses: Number($('ivMax').value)||0,
+      expires_at: $('ivExp').value ? new Date($('ivExp').value + 'T23:59:59').toISOString() : null,
+      created_by: ME ? ME.display_name : null, active: true })});
+    closeModal(); loadUsersInvites(); toast('สร้างรหัสเชิญแล้ว','ok');
+  }catch(e){ toast(/duplicate/i.test(e.message)?'รหัสนี้มีอยู่แล้ว':e.message,'err'); }
+}
+async function toggleInvite(id, on){
+  try{ await sb('pos_invites?id=eq.'+id, {method:'PATCH', prefer:'return=minimal', body: JSON.stringify({active:on})});
+       loadUsersInvites(); }
+  catch(e){ toast(e.message,'err'); }
 }
 function renderPromos(){
   const list = SETTINGS.promos||[];
@@ -1272,13 +1458,10 @@ function addPromo(){
 }
 function rmPromo(i){ SETTINGS.promos.splice(i,1); renderPromos(); renderPromoRow(); }
 async function saveSettings(){
-  const pin = $('stPin').value.trim();
-  if(pin && !/^\d{4,6}$/.test(pin)){ toast('PIN ต้องเป็นตัวเลข 4-6 หลัก','err'); return; }
   const payload = [
     {key:'booth',    value:{name:$('stBoothName').value.trim(), location:$('stBoothLoc').value.trim(), footer:$('stFooter').value.trim()}},
     {key:'currency', value:{primary:$('stCurPrimary').value, rate_thb_to_lak:Number($('stRate').value)||700}},
-    {key:'promos',   value:SETTINGS.promos||[]},
-    ...(pin?[{key:'pin', value:{code:pin}}]:[])
+    {key:'promos',   value:SETTINGS.promos||[]}
   ];
   try{
     await sb('pos_settings?on_conflict=key', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body: JSON.stringify(payload)});
