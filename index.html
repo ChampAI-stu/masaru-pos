@@ -212,7 +212,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v13</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v14</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -233,7 +233,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v13</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v14</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -1135,7 +1135,9 @@ function showSuccess(s){
       ${s.offline ? `<div style="margin-top:12px;background:#FFF3DC;border-radius:9px;padding:9px 12px;font-size:13px;color:#8A6D1F">
         📴 บันทึกในเครื่องแล้ว — จะส่งขึ้นระบบอัตโนมัติเมื่อเน็ตกลับมา (ค้างอยู่ ${getQ().length} บิล)</div>`:''}
     </div>`,
-    [{t:'🖨 พิมพ์บิล',c:'o',f:()=>printBill(s)},{t:'ขายต่อ',c:'g',f:()=>{closeModal();focusScan();}}]);
+    [{t:'🖨 พิมพ์',c:'o',f:()=>printBill(s)},
+     {t:'📄 เปิดบิลแท็บใหม่',c:'o',f:()=>{ printBill(s); setTimeout(openBillTab, 400); }},
+     {t:'ขายต่อ',c:'g',f:()=>{closeModal();focusScan();}}]);
   setTimeout(()=>{ const b=document.querySelector('.mfoot .btn.g'); if(b) b.focus(); }, 100);
 }
 function billHeaderHTML(){
@@ -1166,18 +1168,19 @@ function paperCSS(){
 }
 /* พิมพ์ผ่าน iframe แยกต่างหาก — เอกสารมีแค่ตัวบิลล้วน ๆ
    ไม่มีทางมีหน้าที่ 2 เพราะไม่มี element อื่นอยู่ในเอกสารเลย */
-function printViaFrame(inner){
+let LAST_BILL_HTML = '';
+/* เปิดบิลเป็นหน้าเว็บปกติในแท็บใหม่ → กด Ctrl+P เองได้
+   เป็นเส้นทางพิมพ์ที่ "ธรรมดาที่สุด" ไม่มี iframe ไม่มี JS สั่ง print */
+function openBillTab(){
+  if(!LAST_BILL_HTML){ toast('ยังไม่มีบิล','err'); return; }
+  const wnd = window.open('', '_blank');
+  if(!wnd){ toast('เบราว์เซอร์บล็อกป๊อปอัป — อนุญาตก่อน','err'); return; }
+  wnd.document.write(LAST_BILL_HTML);
+  wnd.document.close();
+}
+function buildBillDoc(inner){
   const c = paperCSS();
-  const old = $('posPrintFrame'); if(old) old.remove();
-  const f = document.createElement('iframe');
-  f.id = 'posPrintFrame';
-  f.setAttribute('aria-hidden','true');
-  f.style.cssText = 'position:fixed;left:-10000px;top:0;width:120mm;height:400mm;border:0';
-  document.body.appendChild(f);
-
-  const d = f.contentWindow.document;
-  d.open();
-  d.write(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>บิล</title><style>
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>บิล MASARU</title><style>
     ${c.page}
     html,body{margin:0;padding:0}
     body{font-family:"Sarabun","Leelawadee UI","Tahoma",sans-serif;box-sizing:border-box;
@@ -1191,21 +1194,30 @@ function printViaFrame(inner){
     table{width:100%;border-collapse:collapse;font-size:.95em}
     td{padding:1px 0;border:none;vertical-align:top}
     .tot{font-weight:700;font-size:1.18em}
-  </style></head><body>${inner}</body></html>`);
-  d.close();
-
+    @media screen{ body{margin:12px auto;box-shadow:0 0 0 1px #ccc} }
+  </style></head><body>${inner}</body></html>`;
+}
+function printViaFrame(inner){
+  LAST_BILL_HTML = buildBillDoc(inner);
+  const old = $('posPrintFrame'); if(old) old.remove();
+  const f = document.createElement('iframe');
+  f.id = 'posPrintFrame';
+  f.setAttribute('aria-hidden','true');
+  f.style.cssText = 'position:fixed;left:-10000px;top:0;width:120mm;height:400mm;border:0';
+  document.body.appendChild(f);
+  const d = f.contentWindow.document;
+  d.open(); d.write(LAST_BILL_HTML); d.close();
   const go = () => {
     try{ f.contentWindow.focus(); f.contentWindow.print(); }
     catch(err){ toast('พิมพ์ไม่สำเร็จ: ' + err.message, 'err'); }
     setTimeout(()=>{ const el = $('posPrintFrame'); if(el) el.remove(); }, 3000);
   };
-  // รอให้เอกสารเรนเดอร์เสร็จจริงก่อนสั่งพิมพ์ ไม่งั้นอาจส่งหน้าเปล่าออกไป
   const ready = (f.contentWindow.document.fonts && f.contentWindow.document.fonts.ready)
     ? f.contentWindow.document.fonts.ready : Promise.resolve();
   let done = false;
   const fire = () => { if(!done){ done = true; go(); } };
   ready.then(()=>setTimeout(fire, 120));
-  setTimeout(fire, 1200);                        // กันเหนียว ถ้า fonts.ready ไม่ยิง
+  setTimeout(fire, 1200);
 }
 function printBill(s){
   const b = SETTINGS.booth || {};
@@ -1658,6 +1670,7 @@ function openAdmin(){
         <select id="stPaper" onchange="togglePaperCustom()">${Object.entries(PAPER).map(([k,v])=>
           `<option value="${k}" ${((SETTINGS.print&&SETTINGS.print.size)==='custom'?'custom':'driver')===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <button class="btn o sm" onclick="testPrint()">🖨 ทดสอบพิมพ์</button>
+      <button class="btn o sm" onclick="testPrint();setTimeout(openBillTab,400)">📄 เปิดแท็บใหม่</button>
     </div>
     <div class="row hide" id="paperCustomRow" style="margin-top:8px">
       <div class="fld"><label>กว้าง (มม.)</label><input type="number" id="stPaperW" value="${(SETTINGS.print&&SETTINGS.print.w)||80}" min="20" step="0.1"></div>
