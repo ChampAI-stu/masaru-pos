@@ -190,24 +190,7 @@ tr:hover td{background:#FAFCFF}
   .g2,.g3{grid-template-columns:1fr}
   .tbl-wrap{max-height:none}
 }
-/* ขนาดกระดาษถูกกำหนดตอนกดพิมพ์ ด้วย applyPrintSize() */
-@media print{
-  html,body{margin:0;padding:0;height:auto;background:#fff}
-  body{overflow:visible}
-  body > *{display:none!important}          /* ซ่อนทุกอย่างในหน้า */
-  #printArea{display:block!important}       /* เหลือแค่บิล */
-  #printArea, #printArea *{break-inside:avoid;page-break-inside:avoid}
-  #printArea{break-after:avoid;page-break-after:avoid}
-}
-#printArea{display:none;font-family:'Sarabun',sans-serif;width:72mm;margin:0;padding:4mm 3mm;
-  box-sizing:border-box;overflow:hidden;font-size:12px;color:#000;line-height:1.35}
-#printArea > *:last-child{margin-bottom:0}
-#printArea h2{text-align:center;margin:4px 0;font-size:15px}
-#printArea .hd{text-align:center;font-size:13px;font-weight:600;line-height:1.5}
-#printArea .hd.brand{font-size:15px;font-weight:700;margin-top:2px}
-#printArea .c{text-align:center} #printArea .rr{display:flex;justify-content:space-between}
-#printArea table{font-size:11px} #printArea td{padding:2px 0;border:none}
-#printArea hr{border:none;border-top:1px dashed #000;margin:6px 0}
+/* บิลพิมพ์ผ่าน iframe แยก — หน้าเว็บหลักไม่ต้องมี CSS สำหรับพิมพ์ */
 </style>
 </head>
 <body>
@@ -229,7 +212,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v11</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v13</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -250,7 +233,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v11</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v13</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -377,7 +360,6 @@ tr:hover td{background:#FAFCFF}
 
 <div id="toast"></div>
 <div id="modalRoot"></div>
-<div id="printArea"></div>
 
 <script>
 /* =====================================================================
@@ -1166,55 +1148,64 @@ function billHeaderHTML(){
   return L.join('');
 }
 const PAPER = {
-  label4x6: {label:'ป้าย 4×6 นิ้ว (RD 4"x6")',    page:'size:101.6mm 152.4mm; margin:0', w:'101.6mm', h:'151mm', fs:'11px'},
-  label4x3: {label:'ป้าย 4×3 นิ้ว',                page:'size:101.6mm 76.2mm; margin:0',  w:'101.6mm', h:'75mm',  fs:'9.5px'},
-  cont102 : {label:'ม้วนต่อเนื่อง 4 นิ้ว (102mm)',  page:'size:102mm auto; margin:0',      w:'102mm',   h:'',      fs:'12px'},
-  slip80  : {label:'สลิปความร้อน 80mm',            page:'size:80mm auto; margin:0',       w:'80mm',    h:'',      fs:'12px'},
-  slip58  : {label:'สลิปความร้อน 58mm',            page:'size:58mm auto; margin:0',       w:'58mm',    h:'',      fs:'10.5px'},
-  a4      : {label:'กระดาษ A4',                    page:'size:A4; margin:12mm',           w:'180mm',   h:'',      fs:'13px'}
+  driver : {label:'ตามเครื่องพิมพ์ (ค่าเริ่มต้น — แนะนำ)'},
+  custom : {label:'กำหนดขนาดเอง (มม.)'}
 };
-function applyPrintSize(){
-  const k = (SETTINGS.print && SETTINGS.print.size) || 'label4x6';
-  const c = PAPER[k] || PAPER.label4x6;
-  let st = $('pgStyle');
-  if(!st){ st = document.createElement('style'); st.id = 'pgStyle'; document.head.appendChild(st); }
-  st.textContent = `@page{${c.page}}
-    #printArea{width:${c.w};font-size:${c.fs};${c.h?`height:${c.h};`:''}}`;
+/* ค่าเริ่มต้น = ไม่กำหนด @page size เลย ปล่อยให้ไดรเวอร์เครื่องพิมพ์ตัดสินใจ
+   (การกำหนดขนาดเองคือสาเหตุที่ทำให้ Windows เลือกกระดาษผิดแล้วขึ้น Paper cannot be fed) */
+function paperCSS(){
+  const s = SETTINGS.print || {};
+  if(s.size === 'custom'){
+    const w  = Math.max(20, Number(s.w) || 80);
+    const hh = Number(s.h) || 0;                       // 0 = ยาวอัตโนมัติ
+    return {page:`@page{size:${w}mm ${hh ? hh + 'mm' : 'auto'}; margin:0}`,
+            w:`width:${w}mm;` + (hh ? `height:${hh - 1}mm;` : ''),
+            fs: w < 62 ? '10.5px' : w < 90 ? '12px' : '11px'};
+  }
+  return {page:'@page{margin:4mm}', w:'width:100%;', fs:'12px'};
 }
 /* พิมพ์ผ่าน iframe แยกต่างหาก — เอกสารมีแค่ตัวบิลล้วน ๆ
    ไม่มีทางมีหน้าที่ 2 เพราะไม่มี element อื่นอยู่ในเอกสารเลย */
 function printViaFrame(inner){
-  const k = (SETTINGS.print && SETTINGS.print.size) || 'label4x6';
-  const c = PAPER[k] || PAPER.label4x6;
+  const c = paperCSS();
   const old = $('posPrintFrame'); if(old) old.remove();
   const f = document.createElement('iframe');
   f.id = 'posPrintFrame';
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0';
+  f.setAttribute('aria-hidden','true');
+  f.style.cssText = 'position:fixed;left:-10000px;top:0;width:120mm;height:400mm;border:0';
   document.body.appendChild(f);
+
   const d = f.contentWindow.document;
   d.open();
   d.write(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>บิล</title><style>
-    @page{${c.page}}
+    ${c.page}
     html,body{margin:0;padding:0}
-    body{font-family:'Sarabun','Tahoma',sans-serif;box-sizing:border-box;
-         width:${c.w};${c.h?`height:${c.h};`:''}padding:4mm 3mm;overflow:hidden;
-         font-size:${c.fs};line-height:1.35;color:#000;-webkit-print-color-adjust:exact}
-    *{box-sizing:border-box;break-inside:avoid;page-break-inside:avoid}
-    .hd{text-align:center;font-weight:600;font-size:1.12em;line-height:1.5}
-    .hd.brand{font-size:1.3em;font-weight:700;margin-top:2px}
+    body{font-family:"Sarabun","Leelawadee UI","Tahoma",sans-serif;box-sizing:border-box;
+         ${c.w}padding:2mm;font-size:${c.fs};line-height:1.35;color:#000}
+    *{box-sizing:border-box}
+    .hd{text-align:center;font-weight:700;font-size:1.1em;line-height:1.5}
+    .hd.brand{font-size:1.28em;margin-top:2px}
     .c{text-align:center}
     .rr{display:flex;justify-content:space-between;gap:6px}
     hr{border:none;border-top:1px dashed #000;margin:5px 0}
     table{width:100%;border-collapse:collapse;font-size:.95em}
     td{padding:1px 0;border:none;vertical-align:top}
     .tot{font-weight:700;font-size:1.18em}
-    body>*:last-child{margin-bottom:0}
   </style></head><body>${inner}</body></html>`);
   d.close();
-  setTimeout(()=>{
-    try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ toast('พิมพ์ไม่สำเร็จ: '+e.message,'err'); }
-    setTimeout(()=>{ const el = $('posPrintFrame'); if(el) el.remove(); }, 2000);
-  }, 300);
+
+  const go = () => {
+    try{ f.contentWindow.focus(); f.contentWindow.print(); }
+    catch(err){ toast('พิมพ์ไม่สำเร็จ: ' + err.message, 'err'); }
+    setTimeout(()=>{ const el = $('posPrintFrame'); if(el) el.remove(); }, 3000);
+  };
+  // รอให้เอกสารเรนเดอร์เสร็จจริงก่อนสั่งพิมพ์ ไม่งั้นอาจส่งหน้าเปล่าออกไป
+  const ready = (f.contentWindow.document.fonts && f.contentWindow.document.fonts.ready)
+    ? f.contentWindow.document.fonts.ready : Promise.resolve();
+  let done = false;
+  const fire = () => { if(!done){ done = true; go(); } };
+  ready.then(()=>setTimeout(fire, 120));
+  setTimeout(fire, 1200);                        // กันเหนียว ถ้า fonts.ready ไม่ยิง
 }
 function printBill(s){
   const b = SETTINGS.booth || {};
@@ -1663,12 +1654,16 @@ function openAdmin(){
 
     <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🖨️ เครื่องพิมพ์</h4>
     <div class="row">
-      <div class="fld" style="flex:1;min-width:220px"><label>ขนาดกระดาษ (ต้องตรงกับที่ตั้งในไดรเวอร์)</label>
-        <select id="stPaper">${Object.entries(PAPER).map(([k,v])=>
-          `<option value="${k}" ${((SETTINGS.print&&SETTINGS.print.size)||'label4x6')===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+      <div class="fld" style="flex:1;min-width:230px"><label>ขนาดกระดาษ</label>
+        <select id="stPaper" onchange="togglePaperCustom()">${Object.entries(PAPER).map(([k,v])=>
+          `<option value="${k}" ${((SETTINGS.print&&SETTINGS.print.size)==='custom'?'custom':'driver')===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <button class="btn o sm" onclick="testPrint()">🖨 ทดสอบพิมพ์</button>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">เลือกให้ตรงกับม้วนที่ใส่ในเครื่องและกับ Paper size ในไดรเวอร์ · ในหน้าต่าง Print ของ Chrome ตั้ง <b>Margins = None</b>, <b>Scale = 100</b>, ปิด <b>Headers and footers</b></p>
+    <div class="row hide" id="paperCustomRow" style="margin-top:8px">
+      <div class="fld"><label>กว้าง (มม.)</label><input type="number" id="stPaperW" value="${(SETTINGS.print&&SETTINGS.print.w)||80}" min="20" step="0.1"></div>
+      <div class="fld"><label>สูง (มม.) — ใส่ 0 = ยาวอัตโนมัติ</label><input type="number" id="stPaperH" value="${(SETTINGS.print&&SETTINGS.print.h)||0}" min="0" step="0.1"></div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">ปกติ<b>ไม่ต้องแตะช่องนี้</b> — ระบบจะไม่กำหนดขนาดกระดาษ ปล่อยให้เครื่องพิมพ์ใช้ขนาดของตัวเอง เหมือนเว็บทั่วไป<br>เลือก "กำหนดขนาดเอง" เฉพาะเมื่อต้องการล็อกความกว้างจริง ๆ (เช่นสลิป 58mm)</p>
 
     <h4 style="margin:18px 0 8px;font-size:14px;color:var(--navy)">🎁 โปรโมชั่น / ส่วนลดด่วน
       <button class="btn sm" style="float:right" onclick="addPromo()">+ เพิ่ม</button></h4>
@@ -1697,11 +1692,16 @@ function openAdmin(){
     </div>`,
     [{t:'ปิด',c:'o',f:closeModal},{t:'💾 บันทึก',c:'g',f:saveSettings}], 'wide');
   renderPromos();
+  togglePaperCustom();
   loadUsersInvites();
   ['stEvent','stBoothLoc','stBoothNo','stBoothName'].forEach(id=>{
     const el = $(id); if(el) el.oninput = hdPreview;
   });
   hdPreview();
+}
+function togglePaperCustom(){
+  const sel = $('stPaper'); if(!sel) return;
+  $('paperCustomRow').classList.toggle('hide', sel.value !== 'custom');
 }
 function hdPreview(){
   const el = $('hdPreview'); if(!el) return;
@@ -1743,7 +1743,8 @@ async function loadUsersInvites(){
   }catch(e){ toast('โหลดผู้ใช้งานไม่สำเร็จ: '+e.message,'err'); }
 }
 function testPrint(){
-  if($('stPaper')) SETTINGS.print = {size: $('stPaper').value};
+  if($('stPaper')) SETTINGS.print = {size: $('stPaper').value,
+    w: Number($('stPaperW').value)||80, h: Number($('stPaperH').value)||0};
   if($('stBoothName')) SETTINGS.booth = boothFromForm();
   printBill({
     billNo:'ทดสอบ-0001', cur:CUR,
@@ -1822,7 +1823,9 @@ async function saveSettings(){
   const payload = [
     {key:'booth',    value: boothFromForm()},
     {key:'promos',   value:SETTINGS.promos||[]},
-    {key:'print',    value:{size: $('stPaper') ? $('stPaper').value : 'label4x6'}}
+    {key:'print',    value:{size: $('stPaper') ? $('stPaper').value : 'driver',
+                            w: Number($('stPaperW') ? $('stPaperW').value : 80) || 80,
+                            h: Number($('stPaperH') ? $('stPaperH').value : 0) || 0}}
   ];
   try{
     await sb('pos_settings?on_conflict=key', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body: JSON.stringify(payload)});
