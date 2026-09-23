@@ -212,7 +212,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v14</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v15</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -233,7 +233,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v14</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v15</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -1387,14 +1387,26 @@ function resizeImage(file, max, quality){
 async function uploadImage(file, sku){
   const path = imgPath(sku);
   const blob = await resizeImage(file, 640, 0.82);
-  const res = await fetch(SB_URL.replace(/\/$/,'') + '/storage/v1/object/' + BUCKET + '/' + encodeURIComponent(path), {
+  let res = await fetch(SB_URL.replace(/\/$/,'') + '/storage/v1/object/' + BUCKET + '/' + encodeURIComponent(path), {
     method:'POST',
-    headers:{apikey:SB_KEY, Authorization:'Bearer ' + SB_KEY, 'Content-Type':'image/jpeg', 'x-upsert':'true'},
+    headers:{apikey:SB_KEY, Authorization: bearer(), 'Content-Type':'image/jpeg', 'x-upsert':'true'},
     body: blob
   });
+  if(res.status === 401 || res.status === 403){          // token หมดอายุ → ต่ออายุแล้วลองใหม่
+    if(await refreshToken()){
+      res = await fetch(SB_URL.replace(/\/$/,'') + '/storage/v1/object/' + BUCKET + '/' + encodeURIComponent(path), {
+        method:'POST',
+        headers:{apikey:SB_KEY, Authorization: bearer(), 'Content-Type':'image/jpeg', 'x-upsert':'true'},
+        body: blob
+      });
+    }
+  }
   if(!res.ok){
     const t = await res.text();
-    throw new Error(/Bucket not found/i.test(t) ? 'ยังไม่ได้สร้าง bucket "pos-images" — รันไฟล์ 03_pos_storage.sql ก่อน' : t);
+    throw new Error(
+      /Bucket not found/i.test(t)      ? 'ยังไม่ได้สร้าง bucket "pos-images" — รันไฟล์ 03_pos_storage.sql ก่อน' :
+      /row-level security|AccessDenied/i.test(t) ? 'ไม่มีสิทธิ์อัปโหลด — รันไฟล์ 04_pos_auth.sql (ส่วน Storage) แล้วออกจากระบบ/เข้าใหม่' :
+      t);
   }
   return publicUrl(path) + '?v=' + Date.now();     // เปลี่ยน v ทุกครั้งที่อัปทับ เพื่อให้เบราว์เซอร์โหลดรูปใหม่
 }
