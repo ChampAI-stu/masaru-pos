@@ -214,7 +214,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v17</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v18</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -235,7 +235,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v17</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v18</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -342,6 +342,14 @@ tr:hover td{background:#FAFCFF}
         </div>
       </div>
       <div class="kpis" id="rpKpis"></div>
+      <div class="card">
+        <h3>💵 แยกตามวิธีชำระเงิน</h3>
+        <div class="tbl-wrap" style="max-height:none">
+          <table><thead><tr><th>วิธีชำระ</th><th class="num">จำนวนบิล</th><th class="num">ยอด ₭ กีบ</th><th class="num">ยอด ฿ บาท</th></tr></thead>
+          <tbody id="rpPayBody"></tbody></table>
+        </div>
+        <div id="rpCashNote" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+      </div>
       <div class="card">
         <h3>🏆 ยอดขายรายสินค้า</h3>
         <div class="tbl-wrap" style="max-height:340px">
@@ -1698,6 +1706,8 @@ function renderReport(){
     <div class="kpi red"><div class="l">ส่วนลดรวม</div><div class="v" style="font-size:19px">${Math.round(sum(paid,'discount_amount')).toLocaleString()}</div></div>
     <div class="kpi"><div class="l">บิลยกเลิก</div><div class="v">${REPORT.sales.length-paid.length}</div></div>`;
 
+  renderPayBreakdown(paid);
+
   const map = {};
   const curOf = id => (REPORT.sales.find(s=>s.id===id)||{}).currency || 'LAK';
   REPORT.items.forEach(i=>{
@@ -1726,6 +1736,40 @@ function renderReport(){
         ${s.status==='paid'?`<button class="btn o sm" onclick="voidSale(${s.id},'${esc(s.bill_no)}')">ยกเลิกบิล</button>`:''}</td>
   </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:26px">ไม่มีบิลในช่วงนี้</td></tr>`;
 }
+const PAY_LABEL = {cash:'💵 เงินสด', transfer:'🏦 โอนเงิน', qr:'📱 QR / พร้อมเพย์', other:'อื่น ๆ'};
+function renderPayBreakdown(paid){
+  const order = ['cash','transfer','qr','other'];
+  const acc = {};
+  order.forEach(k => acc[k] = {n:0, lak:0, thb:0});
+  paid.forEach(s=>{
+    const k = acc[s.payment_method] ? s.payment_method : 'other';
+    acc[k].n++;
+    if(s.currency === 'THB') acc[k].thb += Number(s.total)||0;
+    else                     acc[k].lak += Number(s.total)||0;
+  });
+  const used = order.filter(k => acc[k].n > 0);
+  const sum = {n:0, lak:0, thb:0};
+  used.forEach(k=>{ sum.n += acc[k].n; sum.lak += acc[k].lak; sum.thb += acc[k].thb; });
+
+  $('rpPayBody').innerHTML = used.length ? used.map(k=>`<tr>
+      <td><b>${PAY_LABEL[k]}</b></td>
+      <td class="num">${acc[k].n}</td>
+      <td class="num">${acc[k].lak ? money(acc[k].lak,'LAK') : '—'}</td>
+      <td class="num">${acc[k].thb ? money(acc[k].thb,'THB') : '—'}</td>
+    </tr>`).join('') + `<tr style="background:#F4F7FB">
+      <td><b>รวมทั้งหมด</b></td>
+      <td class="num"><b>${sum.n}</b></td>
+      <td class="num"><b>${sum.lak ? money(sum.lak,'LAK') : '—'}</b></td>
+      <td class="num"><b>${sum.thb ? money(sum.thb,'THB') : '—'}</b></td>
+    </tr>`
+    : `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:22px">ไม่มีข้อมูลในช่วงนี้</td></tr>`;
+
+  const cash = acc.cash, nonCash = sum.lak - cash.lak, nonCashB = sum.thb - cash.thb;
+  $('rpCashNote').innerHTML = sum.n ? `
+    💵 <b style="color:var(--navy)">เงินสดที่ควรมีในลิ้นชัก</b> (ไม่รวมเงินตั้งต้น):
+    ${cash.lak ? `<b>${money(cash.lak,'LAK')}</b>` : ''}${cash.lak && cash.thb ? ' · ' : ''}${cash.thb ? `<b>${money(cash.thb,'THB')}</b>` : ''}${!cash.lak && !cash.thb ? '<b>ไม่มี</b>' : ''}
+    &nbsp;|&nbsp; 🏦 เข้าบัญชี/โอน: ${nonCash ? money(nonCash,'LAK') : ''}${nonCash && nonCashB ? ' · ' : ''}${nonCashB ? money(nonCashB,'THB') : ''}${!nonCash && !nonCashB ? 'ไม่มี' : ''}` : '';
+}
 async function voidSale(id, no){
   const r = prompt('ยกเลิกบิล ' + no + '\nระบบจะคืนสต๊อกอัตโนมัติ\n\nเหตุผล:');
   if(r===null) return;
@@ -1737,7 +1781,20 @@ function exportReport(){
   const head = ['bill_no','sold_at','cashier','currency','item_count','subtotal','discount_amount','total','payment_method','status'];
   const th   = ['เลขบิล','เวลา','ผู้ขาย','สกุลเงิน','จำนวนชิ้น','ยอดรวม','ส่วนลด','ยอดสุทธิ','วิธีชำระ','สถานะ'];
   let csv = th.join(',') + '\n' + REPORT.sales.map(s=>head.map(h=>csvCell(h==='sold_at'?fmtDT(s[h]):s[h])).join(',')).join('\n');
+  // สรุปตามวิธีชำระ
+  const pm = {};
+  REPORT.sales.filter(s=>s.status==='paid').forEach(s=>{
+    const k = PAY_LABEL[s.payment_method] || s.payment_method;
+    if(!pm[k]) pm[k] = {n:0, lak:0, thb:0};
+    pm[k].n++;
+    if(s.currency==='THB') pm[k].thb += Number(s.total)||0; else pm[k].lak += Number(s.total)||0;
+  });
+  csv += '\n\nสรุปตามวิธีชำระเงิน\nวิธีชำระ,จำนวนบิล,ยอดกีบ,ยอดบาท\n';
+  csv += Object.entries(pm).map(([k,v])=>[csvCell(k.replace(/[^\u0E00-\u0E7Fa-zA-Z ]/g,'').trim()),v.n,Math.round(v.lak),v.thb.toFixed(2)].join(',')).join('\n');
+
   csv += '\n\nสรุปรายสินค้า\nSKU,ชื่อสินค้า,จำนวน,ยอดขายกีบ,ยอดขายบาท\n';
+  renderPayBreakdown(paid);
+
   const map = {};
   const curOf = id => (REPORT.sales.find(s=>s.id===id)||{}).currency || 'LAK';
   REPORT.items.forEach(i=>{
