@@ -161,7 +161,9 @@ tr:hover td{background:#FAFCFF}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .keypad button{padding:15px;font-size:19px;font-weight:600;background:#F4F7FB;border-radius:10px;color:var(--navy)}
 .keypad button:active{background:var(--gold)}
-.big-amt{font-size:34px;font-weight:700;text-align:right;padding:12px 14px;background:#F4F7FB;border-radius:10px;font-variant-numeric:tabular-nums;border:2px solid var(--line)}
+.big-amt{width:100%;font-size:34px;font-weight:700;text-align:right;padding:12px 14px;background:#F4F7FB;
+  border-radius:10px;font-variant-numeric:tabular-nums;border:2px solid var(--line);outline:none;color:var(--txt);font-family:inherit}
+.big-amt:focus{border-color:var(--gold);background:#fff;box-shadow:0 0 0 4px rgba(201,168,76,.22)}
 .quick-cash{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .quick-cash button{flex:1;min-width:72px;padding:9px;background:#EDF3FA;border-radius:8px;font-weight:600;font-size:13px;color:var(--navy)}
 
@@ -212,7 +214,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v16</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v17</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -233,7 +235,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v16</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v17</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -1054,7 +1056,9 @@ function openPay(){
         <option value="qr">QR / พร้อมเพย์</option><option value="other">อื่น ๆ</option>
       </select></div>
     <div style="margin-top:10px"><label style="font-size:12px;color:var(--muted);font-weight:500">รับเงินมา</label>
-      <div class="big-amt" id="payAmt">0</div></div>
+      <input class="big-amt" id="payAmt" type="text" inputmode="decimal" value="0" autocomplete="off"
+             onfocus="this.select()" oninput="onPayInput(this)"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();const b=$('btnConfirm');if(b&&!b.disabled)doCheckout();}"></div>
     <div class="quick-cash">
       <button onclick="PAY.paid=${c.total};syncPay()">พอดี</button>
       ${quick.map(q=>`<button onclick="PAY.paid+=${q};syncPay()">+${q.toLocaleString()}</button>`).join('')}
@@ -1069,16 +1073,32 @@ function openPay(){
     <div class="fld" style="margin-top:8px"><label>หมายเหตุบิล</label><input id="payNote"></div>`,
     [{t:'ยกเลิก',c:'o',f:closeModal},{t:'✓ ยืนยันการขาย',c:'g',f:doCheckout,id:'btnConfirm'}]);
   syncPay();
+  setTimeout(()=>{ const el = $('payAmt'); if(el){ el.focus(); el.select(); } }, 120);
+}
+function onPayInput(el){
+  let raw = el.value.replace(/[^0-9.]/g, '');          // เหลือเฉพาะตัวเลข (และจุดทศนิยมตอนเป็นบาท)
+  if(CUR === 'LAK') raw = raw.replace(/\./g, '');       // กีบไม่มีทศนิยม
+  const parts = raw.split('.');
+  if(parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+  PAY.paid = Number(raw) || 0;
+  const endsDot = /\.$/.test(raw);
+  const dec = (raw.split('.')[1] || '').length;
+  // แสดงคั่นหลักพันให้อ่านง่าย แต่ยังพิมพ์ต่อได้
+  el.value = raw === '' ? '' :
+    (Number(raw.split('.')[0]) || 0).toLocaleString('en-US') +
+    (endsDot ? '.' : dec ? '.' + raw.split('.')[1] : '');
+  el.setSelectionRange(el.value.length, el.value.length);
+  syncPay(true);
 }
 function padKey(k){
   if(k==='C'){ PAY.paid = 0; }
   else PAY.paid = Number(String(Math.round(PAY.paid)) + k) || 0;
   syncPay();
 }
-function syncPay(){
+function syncPay(typing){
   const c = calc();
   const el = $('payAmt'); if(!el) return;
-  el.textContent = money(PAY.paid);
+  if(!typing) el.value = (Math.round(PAY.paid * 100) / 100).toLocaleString('en-US');
   const ch = PAY.paid - c.total;
   $('payChange').textContent = money(Math.max(ch,0));
   $('payChange').style.color = ch<0 ? 'var(--danger)' : 'var(--ok)';
