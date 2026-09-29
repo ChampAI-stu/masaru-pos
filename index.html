@@ -214,7 +214,7 @@ tr:hover td{background:#FAFCFF}
   <div class="center-box">
     <h2>MASARU BOOTH POS</h2>
     <p id="authSub">เข้าสู่ระบบเพื่อเริ่มขายหน้าบูธ</p>
-    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v18</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
+    <p style="font-size:11.5px;color:#9AA7B8;margin:-14px 0 14px">เวอร์ชันไฟล์ <b>v19</b> — รองรับออฟไลน์ · หัวบิล 4 บรรทัด · แก้ราคามือ</p>
     <div class="authtabs">
       <button id="atLogin" class="on" onclick="authMode('login')">เข้าสู่ระบบ</button>
       <button id="atReg" onclick="authMode('reg')">สมัครด้วยรหัสเชิญ</button>
@@ -235,7 +235,7 @@ tr:hover td{background:#FAFCFF}
 <div id="app" class="hide">
   <header>
     <div>
-      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v18</em></div>
+      <div class="logo">MASARU <span>POS</span> <em id="hVer" title="เวอร์ชันไฟล์">v19</em></div>
       <div class="booth" id="hBooth">—</div>
     </div>
     <div class="spacer"></div>
@@ -1793,8 +1793,6 @@ function exportReport(){
   csv += Object.entries(pm).map(([k,v])=>[csvCell(k.replace(/[^\u0E00-\u0E7Fa-zA-Z ]/g,'').trim()),v.n,Math.round(v.lak),v.thb.toFixed(2)].join(',')).join('\n');
 
   csv += '\n\nสรุปรายสินค้า\nSKU,ชื่อสินค้า,จำนวน,ยอดขายกีบ,ยอดขายบาท\n';
-  renderPayBreakdown(paid);
-
   const map = {};
   const curOf = id => (REPORT.sales.find(s=>s.id===id)||{}).currency || 'LAK';
   REPORT.items.forEach(i=>{
